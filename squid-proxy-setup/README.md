@@ -111,10 +111,46 @@ cd squid-proxy-setup
         Any files that you want to copy to the squid container can be put into `files/`.
         The whole directory will be shared as a volume mount to the squid container.
 
+        >   Any file want to pass on to container and use in squid config. Just place that file in `files` directory. Those files can be accessed using `/files/<fileName>` inside the container.
+
+        >   **Custom command execution**<br/>
+        >   Some custom command can be executed through `setup.sh` script. `setup.sh` script will be executed just before starting the squid proxy server.
+
     4.  Start proxy: [`./start.sh`](./start.sh)<br/>
         View access logs: [`./tail_access_logs.sh`](./tail_access_logs.sh)<br/>
         Stop proxy: [`./stop.sh`](./stop.sh)<br/>
     
+## Transparent Proxy
+
+Configure below rules for transparent proxy
+
+The machine where we configure transparent proxy will have to be used
+as the default gateway for the clients using transparent proxy.
+We have to make this VM act as a router by enabling NAT.
+
+- ### Enable ip forwarding
+    open file "/etc/sysctl.conf" and uncomment below
+    ```
+    net.ipv4.ip_forward = 1
+    ```
+    Reload sysctl
+    ```bash
+    sudo sysctl -p /etc/sysctl.conf
+    ```
+
+- ### Set ip table NAT rules
+    Check out this [tutorial][nat_iptables] to get an idea of NAT and iptables.
+    We are redirecting all the http and https traffic to the squid proxy server.
+    ```bash
+    # $iface : The interface connected to the private network. eg: eth0
+    # $http_proxy_port = The proxy port for http (non-SSL proxy). eg: 3128
+    # $https_proxy_port = The proxy port for https (SSL proxy). eg: 3129
+    
+    sudo iptables -t nat -A PREROUTING -i $iface -p tcp --dport 80 -j REDIRECT --to-port $http_proxy_port
+    sudo iptables -t nat -A PREROUTING -i $iface -p tcp --dport 443 -j REDIRECT --to-port $https_proxy_port
+    sudo iptables -t nat -A POSTROUTING -o $iface -p tcp -j MASQUERADE
+    ```
+    Use `iptables-persistent` to persist these rules; `sudo apt-get install iptables-persistent`
 
 ## 3. Machine behind proxy server
 
@@ -165,75 +201,4 @@ To pass environment variables during sudo, you can run `sudo -E`
 [6]: http://en.wikipedia.org/wiki/NCSA_HTTPd
 [7]: https://manuals.gfi.com/en/kerio/connect/content/server-configuration/ssl-certificates/adding-trusted-root-certificates-to-the-server-1605.html
 [dnsmasq_arch]: https://wiki.archlinux.org/title/dnsmasq
-
-<!-- 
-    Alternative: Run DHCP Server on the VM.
-    
-    In case you do not want to set static network configuration for all VMs connected to `proxy-segment`, you will need a DHCP Server. We can install the DHCP server on the same machine where proxy server will be installed.
-
-    1.  Install DHCP server
-        ```
-        sudo apt install isc-dhcp-server
-        ```
-      
-    2.  Edit file `/etc/default/isc-dhcp-server`.
-      
-        Set INTERFACESv4 (or INTERFACES in older versions) to the interface name that is connected to `proxy-network`. The DHCP requests only coming to this interface will be served.
-        ```
-        INTERFACESv4="eth0"
-        ```
-    3.  Edit file `/etc/dhcp/dhcpd.conf`.
-        ```conf
-        # leave them as default
-        default-lease-time 600;
-        max-lease-time 7200;
-        ddns-update-style none;
-
-        # Add/update these configs.
-        option domain-name-servers 192.168.0.1;
-        subnet 192.168.0.0 netmask 255.255.255.0 {
-          range 192.168.0.100 192.168.0.240; # Any section of the network.
-          option routers 192.168.0.1; # The IP of this machine.
-          option subnet-mask 255.255.255.0; # The subnet mask (/24).
-        }
-        ```
-    
-    4.  Start the DHCP service.
-        ```bash
-        sudo systemctl enable isc-dhcp-server
-        sudo systemctl start isc-dhcp-server
-        ``` 
-
-## 3. Configure below rules for transparent proxy
-
-The machine where we configure transparent proxy will have to be used
-as the default gateway for the clients using transparent proxy.
-We have to make this VM act as a router by enabling NAT.
-
-- ### Enable ip forwarding
-    open file "/etc/sysctl.conf" and uncomment below
-    ```
-    net.ipv4.ip_forward = 1
-    ```
-    Reload sysctl
-    ```bash
-    sudo sysctl -p /etc/sysctl.conf
-    ```
-
-- ### Set ip table NAT rules
-    Check out this [tutorial][2] to get an idea of NAT and iptables.
-    We are redirecting all the http and https traffic to the squid proxy server.
-    ```bash
-    # $iface : The interface connected to the private network. eg: eth0
-    # $http_proxy_port = The proxy port for http (non-SSL proxy). eg: 3128
-    # $https_proxy_port = The proxy port for https (SSL proxy). eg: 3129
-    
-    sudo iptables -t nat -A PREROUTING -i $iface -p tcp --dport 80 -j REDIRECT --to-port $http_proxy_port
-    sudo iptables -t nat -A PREROUTING -i $iface -p tcp --dport 443 -j REDIRECT --to-port $https_proxy_port
-    sudo iptables -t nat -A POSTROUTING -o $iface -p tcp -j MASQUERADE
-    ```
-    Use `iptables-persistent` to persist these rules; `sudo apt-get install iptables-persistent`
-
-[2]: https://www.karlrupp.net/en/computer/nat_tutorial
-
--->
+[nat_iptables]: https://www.karlrupp.net/en/computer/nat_tutorial
