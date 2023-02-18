@@ -76,8 +76,8 @@ sudo usermod -aG docker $USER
 2. Clone the repository
 
 ```bash
-git clone https://github.com/nascarsayan/squid-proxy-setup
-cd squid-proxy-setup
+git clone https://github.com/Azure/arcvmware-util.git
+cd arcvmware-util/squid-proxy-setup
 ```
 
 3. Create / Update the files required by squid

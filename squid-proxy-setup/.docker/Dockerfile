@@ -1,32 +1,74 @@
-FROM ubuntu
-ARG DEBIAN_FRONTEND=noninteractive
-RUN apt update &&\
-  apt install -y --no-install-recommends apt-utils &&\
-  dpkg-reconfigure apt-utils &&\
-  apt install -y libssl-dev pkg-config build-essential autoconf wget jq curl vim cron &&\
-  apt upgrade -y
+FROM ubuntu:22.04
+ARG SQUID_VERSION=5.7
 
-RUN groupadd -g 456 squid &&\
+# Dependencies from
+# https://github.com/kinkie/dockerfiles/blob/8f1468c3016fba0393f13c3a19662a5fc05ca9ab/ubuntu-jammy/Dockerfile
+# as per https://wiki.squid-cache.org/SquidFaq/CompilingSquid#what-else-do-i-need-to-compile-squid
+RUN apt update && \
+  DEBIAN_FRONTEND=noninteractive apt install --no-install-recommends -y \
+    autoconf \
+    autoconf-archive \
+    automake \
+    build-essential \
+    bzip2 \
+    ca-certificates \
+    ccache \
+    clang \
+    cron \
+    curl \
+    ed \
+    g++ \
+    git \
+    gnutls-bin \
+    jq \
+    libcap-dev \
+    libcppunit-dev \
+    libexpat-dev \
+    libgnutls28-dev \
+    libltdl-dev \
+    libssl-dev \
+    libtdb-dev \
+    libtool \
+    libtool-bin \
+    libxml2-dev \
+    make \
+    nettle-dev \
+    pkg-config \
+    po4a \
+    translate-toolkit \
+    vim \
+    wget \
+    xz-utils
+
+RUN groupadd -g 456 squid && \
   useradd -g squid squid
 
-RUN curl -L http://www.squid-cache.org/Versions/v4/squid-4.14.tar.gz | tar -xz
+RUN mkdir -p /tmp/build && \
+  cd /tmp/build && \
+  curl -L \
+  "http://www.squid-cache.org/Versions/v${SQUID_VERSION%%.*}/squid-${SQUID_VERSION}.tar.gz" | \
+    tar -xz --strip-components 1 && \
+  ./configure \
+    --with-default-user=squid \
+    --with-openssl \
+    --enable-ssl-crtd \
+    --disable-arch-native && \
+  make && \
+  make install && \
+  rm -rf /tmp/build
 
-WORKDIR /squid-4.14
-RUN ./configure --with-default-user=proxy --with-openssl --enable-ssl-crtd --disable-arch-native
-RUN make
-RUN make install
+RUN chmod 777 /usr/local/squid/var/logs && \
+  /usr/local/squid/libexec/security_file_certgen -c -s \
+    /usr/local/squid/var/cache/squid/ssl_db -M 4MB && \
+  chown squid:squid /usr/local/squid/var/cache/squid/ssl_db -R
 
-RUN chmod 777 /usr/local/squid/var/logs
-RUN /usr/local/squid/libexec/security_file_certgen -c -s /usr/local/squid/var/cache/squid/ssl_db -M 4MB
-RUN chown proxy:proxy /usr/local/squid/var/cache/squid/ssl_db -R
+COPY certs/microsoft.crt /usr/local/share/ca-certificates/microsoft.crt
+RUN update-ca-certificates
 
 WORKDIR /
-RUN rm -r /squid-4.14
 
-COPY startup.sh .
-RUN chmod +x startup.sh
-
-COPY rotate_access_logs_and_cleanup.sh .
-RUN chmod +x rotate_access_logs_and_cleanup.sh
+COPY startup.sh rotate_access_logs_and_cleanup.sh ./
+RUN chmod +x startup.sh && \
+  chmod +x rotate_access_logs_and_cleanup.sh
 
 CMD ["bash", "startup.sh"]
