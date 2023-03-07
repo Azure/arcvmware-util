@@ -41,7 +41,7 @@ fi
 
 /usr/local/squid/sbin/squid start -f squid.conf
 
-echo "* * * * * /rotate_access_logs_and_cleanup.sh" | crontab -
+echo "* * * * * export SQUID_AUTH_CREDS=\"$SQUID_AUTH_CREDS\"; /cron.sh" | crontab -
 service cron restart
 
 tail -F /usr/local/squid/var/logs/access.log

@@ -67,8 +67,7 @@ RUN update-ca-certificates
 
 WORKDIR /
 
-COPY startup.sh rotate_access_logs_and_cleanup.sh ./
-RUN chmod +x startup.sh && \
-  chmod +x rotate_access_logs_and_cleanup.sh
+COPY startup.sh cron.sh ./
+RUN chmod +x startup.sh cron.sh
 
 CMD ["bash", "startup.sh"]
