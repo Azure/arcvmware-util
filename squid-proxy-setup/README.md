@@ -119,7 +119,7 @@ cd arcvmware-util/squid-proxy-setup
     4.  Before starting the squid container, set the environment variable `SQUID_AUTH_CREDS`.
         It is required for the healthcheck cronjob.
         ```bash
-        export SQUID_AUTH_CREDS=$username:$password
+        export SQUID_AUTH_CREDS="$username:$password"
         ```
         If the proxy server is not configured with basic auth, then set the value to `none`.
         ```bash
