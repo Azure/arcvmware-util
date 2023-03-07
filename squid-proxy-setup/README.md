@@ -116,7 +116,17 @@ cd arcvmware-util/squid-proxy-setup
         >   **Custom command execution**<br/>
         >   Some custom command can be executed through `setup.sh` script. `setup.sh` script will be executed just before starting the squid proxy server.
 
-    4.  Start proxy: [`./start.sh`](./start.sh)<br/>
+    4.  Before starting the squid container, set the environment variable `SQUID_AUTH_CREDS`.
+        It is required for the healthcheck cronjob.
+        ```bash
+        export SQUID_AUTH_CREDS=$username:$password
+        ```
+        If the proxy server is not configured with basic auth, then set the value to `none`.
+        ```bash
+        export SQUID_AUTH_CREDS=none
+        ```
+
+    5.  Start proxy: [`./start.sh`](./start.sh)<br/>
         View access logs: [`./tail_access_logs.sh`](./tail_access_logs.sh)<br/>
         Stop proxy: [`./stop.sh`](./stop.sh)<br/>
     
