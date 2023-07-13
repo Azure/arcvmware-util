@@ -52,6 +52,7 @@ RUN mkdir -p /tmp/build && \
     --with-default-user=squid \
     --with-openssl \
     --enable-ssl-crtd \
+    --enable-delay-pools \
     --disable-arch-native && \
   make && \
   make install && \
