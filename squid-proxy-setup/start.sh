@@ -34,5 +34,5 @@ docker run -d \
   --env SQUID_AUTH_CREDS="$SQUID_AUTH_CREDS" \
   --name squid-proxy \
   --restart on-failure:3 \
-  --net host \
+  -p 3128:3128 -p 3129:3129 \
   "$SQUID_IMG"
