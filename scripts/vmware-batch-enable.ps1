@@ -135,7 +135,7 @@ $VMtpl = @'
           },
           "extendedLocation": {
             "type": "CustomLocation",
-            "name": "{{customLocationId}}",
+            "name": "{{customLocationId}}"
           },
           "dependsOn": [
             "[resourceId('Microsoft.HybridCompute/machines','{{vmName}}')]"
@@ -324,7 +324,11 @@ for ($i = 0; $i -lt $nonManagedVMs.Length; $i++) {
     $deploymentName = "vmw-dep-$StartTime-$batch"
     $deploymentFilePath = Join-Path $PSScriptRoot -ChildPath "$deploymentName.json"
 
-    $deployment | Out-File -FilePath $deploymentFilePath -Encoding UTF8
+    # NOTE: Uncomment the following lines if you want to pretty print the ARM deployment files.
+    # $deployment = ConvertFrom-Json | ConvertTo-Json -Depth 100
+
+    $deployment `
+    | Out-File -FilePath $deploymentFilePath -Encoding UTF8
 
     $deploymentId = "/subscriptions/$subId/resourceGroups/$resourceGroupName/providers/Microsoft.Resources/deployments/$deploymentName"
     $deploymentUrl = "https://portal.azure.com/#resource$($deploymentId)/overview"
