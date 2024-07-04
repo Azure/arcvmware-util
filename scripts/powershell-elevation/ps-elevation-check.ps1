@@ -1,12 +1,20 @@
-# if govc is not installed, install it
-if (-not (Get-Command govc -ErrorAction SilentlyContinue)) {
-  $url = "https://github.com/vmware/govmomi/releases/download/v0.34.2/govc_Windows_x86_64.zip"
-  Invoke-WebRequest -Uri $url -OutFile govc.zip
-  Expand-Archive -Path govc.zip -DestinationPath $env:ProgramFiles
+$tmpFolder = Join-Path $PSScriptRoot ".temp"
+if ((Test-Path -Path $tmpFolder) -eq $false) {
+  New-Item -ItemType Directory -Path $tmpFolder | Out-Null
+}
+$govcExe = Join-Path $tmpFolder "govc.exe"
+if((Test-Path -Path $govcExe) -eq $false)
+{
+  Write-Host "Downloading govc..."
+  $govcZipPath = Join-Path $tmpFolder "govc_windows_amd64.exe.zip"
+  Invoke-WebRequest https://github.com/vmware/govmomi/releases/download/v0.34.2/govc_windows_amd64.exe.zip -OutFile $govcZipPath
+  Expand-Archive -Force $govcZipPath -DestinationPath $tmpFolder
+  Rename-Item -Force -Path (Join-Path $tmpFolder "govc_windows_amd64.exe") -NewName "govc.exe"
 }
 
 $env:GOVC_INSECURE = 'true'
 
+Write-Host -ForegroundColor Yellow "Please provide the VCenter details"
 $vCenterAddress = Read-Host -Prompt "Enter the vCenter Address (e.g. vcenter.contoso.com, 1.2.3.4:443). Please do not include https:// or trailing slash"
 $vCenterCredential = Get-Credential -Message "Enter the vCenter credentials"
 $vCenterUser = $vCenterCredential.UserName
@@ -19,6 +27,8 @@ $env:GOVC_PASSWORD = $vCenterPass
 # $env:GOVC_USERNAME = "contoso@vsphere.local"
 # $env:GOVC_PASSWORD = "contosopass"
 
+Write-Host -ForegroundColor Yellow "Please provide the Windows VM details"
+$VMName = Read-Host -Prompt "Enter the name of the Windows VM"
 $VMCredential = Get-Credential -Message "Enter the credentials for the Windows VM"
 $VMUser = $VMCredential.UserName
 $VMPass = $VMCredential.GetNetworkCredential().Password
@@ -27,8 +37,6 @@ $VMPass = $VMCredential.GetNetworkCredential().Password
 # $VMPass = 'contosovmpass'
 
 $VMCreds = "$($VMUser):$($VMPass)"
-
-$VMName = Read-Host -Prompt "Enter the name of the Windows VM"
 
 $scriptContents = @'
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent());
@@ -44,12 +52,12 @@ Write-Host "`nDone collecting required info`n`n"
 '@
 
 $EncodedScript = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($scriptContents))
-$vmPath = (govc find -type m -name vm-01-acces-local)
+$vmPath = (. $govcExe find -type m -name $VMName)
 if (!$vmPath) {
   Write-Host "VM not found: $VMName"
   exit 1
 }
 
-govc guest.run -vm $vmPath -l $VMCreds "powershell.exe -NoLogo -NoProfile -NonInteractive -executionpolicy bypass -encodedCommand $EncodedScript" | Out-File ps-elevation-output.log
+. $govcExe guest.run -vm $vmPath -l $VMCreds "powershell.exe -NoLogo -NoProfile -NonInteractive -executionpolicy bypass -encodedCommand $EncodedScript" | Out-File ps-elevation-output.log
 
-Write-Host "Please check the file ps-elevation-output.log for the output of the script."
+Write-Host -ForegroundColor Yellow "`n`nPlease check the file ps-elevation-output.log for the output of the script."
