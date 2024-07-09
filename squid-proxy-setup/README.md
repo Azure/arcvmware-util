@@ -63,8 +63,20 @@ The network topology should look like this.
 
 ## 2. Run squid proxy
 
-1. Install docker [Ref][5]
+1. Install docker 
 
+```
+curl -fsSL https://get.docker.com | sh
+sudo apt install -y uidmap
+# Next add your user to run docker (rootles mode)
+# don't do dockerd-rootless-setuptool.sh install; it limits the number of uid / gids available for user. Causes issues for some docker images.
+sudo newgrp docker
+sudo usermod -aG docker <your-username>
+```
+
+Old method
+
+[Ref][5]
 ```bash
 sudo apt install apt-transport-https ca-certificates curl software-properties-common
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
