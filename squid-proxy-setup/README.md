@@ -58,6 +58,10 @@ The network topology should look like this.
       
     2.  Edit file `/etc/dnsmasq.conf`.
 
+        > [!IMPORTANT]
+        > From previous experience, DNSServer created by dnsmasq isn't that reliable (might start hanging up after a few days), and it's better to offload the DNS resolution to an external DNS server.
+        > Hence Case 1 is recommended.
+
         #### Case 1: Just for DHCP
         ```conf
         listen-address=192.168.0.1
@@ -88,26 +92,17 @@ The network topology should look like this.
 
 ## 2. Run squid proxy
 
-1. Install docker 
+> [!NOTE]
+> For standalone install (non-container) in Ubuntu, we can use the [`standalone-install.sh`](./standalone-install.sh) script.
 
-```
+1. Install docker [Ref][5]
+
+```bash
 curl -fsSL https://get.docker.com | sh
-sudo apt install -y uidmap
 # Next add your user to run docker (rootles mode)
 # don't do dockerd-rootless-setuptool.sh install; it limits the number of uid / gids available for user. Causes issues for some docker images.
 sudo newgrp docker
 sudo usermod -aG docker <your-username>
-```
-
-Old method
-
-[Ref][5]
-```bash
-sudo apt install apt-transport-https ca-certificates curl software-properties-common
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-sudo apt-get update && sudo apt-get install -y docker-ce docker-ce-cli containerd.io
-sudo usermod -aG docker $USER
 ```
 
 2. Clone the repository
@@ -153,17 +148,7 @@ cd arcvmware-util/squid-proxy-setup
         >   **Custom command execution**<br/>
         >   Some custom command can be executed through `setup.sh` script. `setup.sh` script will be executed just before starting the squid proxy server.
 
-    4.  Before starting the squid container, set the environment variable `SQUID_AUTH_CREDS`.
-        It is required for the healthcheck cronjob.
-        ```bash
-        export SQUID_AUTH_CREDS="$username:$password"
-        ```
-        If the proxy server is not configured with basic auth, then set the value to `none`.
-        ```bash
-        export SQUID_AUTH_CREDS=none
-        ```
-
-    5.  Start proxy: [`./start.sh`](./start.sh)<br/>
+    4.  Start proxy: [`./start.sh`](./start.sh)<br/>
         View access logs: [`./tail_access_logs.sh`](./tail_access_logs.sh)<br/>
         Stop proxy: [`./stop.sh`](./stop.sh)<br/>
     
@@ -198,18 +183,25 @@ We have to make this VM act as a router by enabling NAT.
 
 - ### Set iptables NAT rules
     Check out this [tutorial][nat_iptables] to get an idea of NAT and iptables.
+    This is another [exhaustive tutorial][exhaustive_iptables_tutorial] on iptables.
 
-    We are redirecting all the http and https traffic to the squid proxy server, also masquerading the packets going out of the proxy server's public-facing interface.
-    ```bash
-    export ifExt=ens160 # The interface connected to the external interface, which has internet access
-    export ifPriv=ens192 # The interface connected to the private network
-    export http_proxy_port=3130 # The proxy port for http traffic (non-SSL proxy)
-    export https_proxy_port=3131 # The proxy port for https traffic (SSL proxy)
-    export external_ip=$(ip addr show dev $ifExt | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1)
-    sudo iptables -t nat -A PREROUTING -i $ifPriv -p tcp --dport 80 -j DNAT --to $external_ip:$http_proxy_port
-    sudo iptables -t nat -A PREROUTING -i $ifPriv -p tcp --dport 443 -j DNAT --to $external_ip:$https_proxy_port
-    sudo iptables -t nat -A POSTROUTING -o $ifExt -j MASQUERADE
-    ```
+    1. Run the following commands to set the NAT rules:
+        ```bash
+        export ifExt=ens160 # The interface connected to the external interface (internet-segment)
+        export ifPriv=ens192 # The interface connected to the private network (proxy-segment)
+        export http_proxy_port=3130 # The proxy port for http traffic (non-SSL proxy)
+        export https_proxy_port=3131 # The proxy port for https traffic (SSL proxy)
+        sudo iptables -t nat -A PREROUTING -i $ifPriv -p tcp --dport 80 -j REDIRECT --to-port  $http_proxy_port
+        sudo iptables -t nat -A PREROUTING -i $ifPriv -p tcp --dport 443 -j REDIRECT --to-port  $https_proxy_port
+        sudo iptables -t nat -A POSTROUTING -o $ifExt -j MASQUERADE
+        ```
+
+        [Set of alternative commands](#iptables-alt)
+
+        We have 3 iptable commands here:
+        1. The first command redirects all the incoming traffic arriving through proxy-segment on port 80 to port 3130 (the port where the non-SSL proxy is running).
+        2. The second command redirects all the incoming traffic arriving through proxy-segment on port 443 to port 3131 (the port where the SSL proxy is running).
+        3. The third command is for NAT. It changes the source IP address of **all the packets** going out of the machine through the `internet-segment` interface to the IP address of the `internet-segment` interface. `MASQUERADE` is used to dynamically change the source IP address of the packets, since the IP address of the `internet-segment` interface might change. It's similar to `SNAT` but with `MASQUERADE` the source IP address is dynamically changed.
 
     You can also export and import the iptables rules using the following commands:
     ```bash
@@ -217,7 +209,7 @@ We have to make this VM act as a router by enabling NAT.
     iptables-restore < /my/ip-rules.conf
     ```
 
-    Use `iptables-persistent` to persist these rules; `sudo apt-get install iptables-persistent`
+    Use `iptables-persistent` to persist these rules; `sudo apt install iptables-persistent`
 
 ## 3. Machine behind proxy server
 
@@ -269,10 +261,50 @@ To pass environment variables during sudo, you can run `sudo -E`
 [7]: https://manuals.gfi.com/en/kerio/connect/content/server-configuration/ssl-certificates/adding-trusted-root-certificates-to-the-server-1605.html
 [dnsmasq_arch]: https://wiki.archlinux.org/title/dnsmasq
 [nat_iptables]: https://www.karlrupp.net/en/computer/nat_tutorial
+[exhaustive_iptables_tutorial]: https://rlworkman.net/howtos/iptables/iptables-tutorial.html#TRAVERSINGOFTABLES
 
 ### Aside
 
-Link contains interesting logformat:
+1. Link contains interesting logformat:
+    https://kenmoini.com/post/2024/05/outbound-squid-proxy/
 
-https://kenmoini.com/post/2024/05/outbound-squid-proxy/
+2. <span id="iptables-alt">Alternative commands for `iptables`. But these commands will break if the IP address of the `internet-segment` interface changes.</span>
+    ```bash
+    export ifExt=ens160 # The interface connected to the external interface (internet-segment)
+    export ifPriv=ens192 # The interface connected to the private network (proxy-segment)
+    export http_proxy_port=3130 # The proxy port for http traffic (non-SSL proxy)
+    export https_proxy_port=3131 # The proxy port for https traffic (SSL proxy)
+    export external_ip=$(ip addr show dev $ifExt | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1)
+    sudo iptables -t nat -A PREROUTING -i $ifPriv -p tcp --dport 80 -j DNAT --to $external_ip:$http_proxy_port
+    sudo iptables -t nat -A PREROUTING -i $ifPriv -p tcp --dport 443 -j DNAT --to $external_ip:$https_proxy_port
+    sudo iptables -t nat -A POSTROUTING -o $ifExt -j MASQUERADE
+    ```
 
+<details>
+    <summary>How to connect through a Jumpserver to a VM inside private network</summary>
+
+- 100.101.102.103 : IP of the jumpserver (eg, where tailscale is installed)
+
+- 172.17.100.101: IP of the transparent proxy server / router VM (connected to both public and private network). It's internal IP is 192.68.0.1
+
+- 192.168.0.100: IP of the client VM inside the private network
+
+**on the jumpserver (IP: 100.101.102.103)**
+
+```bash
+sudo iptables -t nat -A PREROUTING -i tailscale0 -p tcp --dport 2222 -j DNAT --to-destination 172.17.100.101:2222
+```
+
+**on the proxy server / router of private network (IP: 172.17.100.101)**
+
+```bash
+sudo iptables -t nat -A PREROUTING -i ens160 -p tcp --dport 2222 -j DNAT --to-destination 192.168.0.100:22
+```
+
+Now we can ssh into the client VM from the jumpserver using the command:
+
+```bash
+ssh -p 2222 arcvmware@100.101.102.103
+```
+
+</details>

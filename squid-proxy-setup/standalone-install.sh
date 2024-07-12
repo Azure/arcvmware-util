@@ -51,6 +51,11 @@ sudo apt update && \
 sudo groupadd -g 456 squid && \
   sudo useradd -g squid squid
 
+# NOTE: We can also add the flags mentioned below for changing the directory paths of squid files.
+# Currently, systemd unit file is causing issues, so we are directly running squid binary.
+# TODO: Check how to make systemd unit file work, and if these flags are related to that.
+# https://wiki.squid-cache.org/SquidFaq/CompilingSquid#debian-ubuntu
+
 mkdir -p /tmp/build && \
   cd /tmp/build && \
   curl -L \
@@ -74,7 +79,7 @@ sudo chmod 777 /usr/local/squid/var/logs && \
 sudo cp certs/microsoft.crt /usr/local/share/ca-certificates/microsoft.crt
 sudo update-ca-certificates
 
-sudo cp "$files_dir/squid.conf" /usr/local/squid/etc/squid.conf
+sudo ln -s "$files_dir/squid.conf" /usr/local/squid/etc/squid.conf
 
 sed 's@/files@'"$files_dir"'@g' "$files_dir/squid.conf" | sudo tee /usr/local/squid/etc/squid.conf > /dev/null
 sudo ln -s "$files_dir/proxy_ca.crt" /usr/local/squid/etc/
@@ -83,19 +88,33 @@ sudo ln -s "$files_dir/proxy_ca.key" /usr/local/squid/etc/
 # Add squid to PATH
 sudo ln -s /usr/local/squid/sbin/squid /usr/sbin/
 
-function sq() {
-  if [ "$1" = "start" ]; then
-    sudo squid -f /usr/local/squid/etc/squid.conf
-  elif [ "$1" = "stop" ]; then
-    sudo squid -k shutdown
-    sudo pkill squid
-  elif [ "$1" = "status" ]; then
-    sudo squid -k check
-  elif [ "$1" = "access" ]; then
-    sudo tail -f /usr/local/squid/var/logs/access.log
-  elif [ "$1" = "cache" ]; then
-    sudo tail -f /usr/local/squid/var/logs/cache.log
-  else
-    echo "Invalid command. Use start, stop, status, access or cache."
-  fi
-}
+cat <<'EOF' | sudo tee /usr/local/bin/sq > /dev/null
+#!/bin/bash
+
+if [ -z "$1" ]; then
+  echo "Usage: sq [start|stop|status|access|cache]"
+  exit 1
+fi
+if [ "$1" = "start" ]; then
+  sudo squid -f /usr/local/squid/etc/squid.conf
+elif [ "$1" = "stop" ]; then
+  sudo squid -k shutdown
+  sudo pkill squid
+elif [ "$1" = "status" ]; then
+  sudo squid -k check
+elif [ "$1" = "access" ]; then
+  sudo tail -f /usr/local/squid/var/logs/access.log
+elif [ "$1" = "cache" ]; then
+  sudo tail -f /usr/local/squid/var/logs/cache.log
+else
+  echo "Invalid command: '$1' . Usage: sq [start|stop|status|access|cache]"
+fi
+EOF
+
+# rotate logs every sunday
+echo "0 0 * * 0 /usr/local/squid/sbin/squid -k rotate" | sudo crontab -
+
+sudo chmod +x /usr/local/bin/sq
+# start squid on boot
+
+echo "Squid setup complete. You can now start squid using 'sq start' command. Run 'sq' for more options."
