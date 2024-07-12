@@ -37,40 +37,72 @@ The network topology should look like this.
     If you don't want to set static network configuration for all VMs connected to `proxy-segment`, you will need a DHCP Server. We can install the DHCP server on the same machine where proxy server will be installed. We could have a DNS server in the network too in order to resolve local addresses.<br/>
     [`dnsmasq`][dnsmasq_arch] can serve for both the purposes.
 
+    > [!NOTE]
+    > Here we are using `8.8.8.8` as our upstream DNS server.
+    > You can use any other DNS server as per your requirement.
+
     1.  Install dnsmasq
-        ```
+        
+        - Disable systemd-resolved which might conflict with dnsmasq.
+        - Remove the existing resolv.conf and create a new one with a working DNS server. This is required for several reasons:
+          - Sometimes, this file is a symlink to `/run/systemd/resolve/stub-resolv.conf` which might not be present.
+          - Since we've removed systemd-resolved, we need to have a working DNS server. This file is our only helper in name resolution. No other package / service should override the setting in this file.
+
+        ```bash
         sudo systemctl disable systemd-resolved
         sudo systemctl stop systemd-resolved
-        sudo rm /etc/resolv.conf
-        echo nameserver 8.8.8.8 | sudo tee /etc/resolv.conf
+        sudo rm -f /etc/resolv.conf
+        echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf
         sudo apt install -y dnsmasq
         ```
       
     2.  Edit file `/etc/dnsmasq.conf`.
+
+        > [!IMPORTANT]
+        > From previous experience, DNSServer created by dnsmasq isn't that reliable (might start hanging up after a few days), and it's better to offload the DNS resolution to an external DNS server.
+        > Hence Case 1 is recommended.
+
+        #### Case 1: Just for DHCP
         ```conf
         listen-address=192.168.0.1
+        dhcp-range=192.168.0.100,192.168.0.240,12h
+        dhcp-option=option:router,192.168.0.1
+        dhcp-option=option:dns-server,8.8.8.8
+        dhcp-leasefile=/var/lib/misc/dnsmasq.leases
+        dhcp-authoritative
+        ```
+
+        #### Case 2: For DNS and DHCP both
+        ```conf
+        listen-address=192.168.0.1
+        server=8.8.8.8
         dhcp-range=192.168.0.100,192.168.0.240,12h
         dhcp-option=option:router,192.168.0.1
         dhcp-option=option:dns-server,192.168.0.1,8.8.8.8
         dhcp-leasefile=/var/lib/misc/dnsmasq.leases
         dhcp-authoritative
         ```
+
+        In the 2nd case case, you can also update the entry in `/etc/resolv.conf` to `nameserver 127.0.0.1`. This will make the firewall machine use its own server for DNS resolution.
     
-    4.  Restart the dnsmsq service.
+    3.  Restart the dnsmsq service.
         ```bash
         sudo systemctl restart dnsmasq
         ```
 
 ## 2. Run squid proxy
 
+> [!NOTE]
+> For standalone install (non-container) in Ubuntu, we can use the [`standalone-install.sh`](./standalone-install.sh) script.
+
 1. Install docker [Ref][5]
 
 ```bash
-sudo apt install apt-transport-https ca-certificates curl software-properties-common
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-sudo apt-get update && sudo apt-get install -y docker-ce docker-ce-cli containerd.io
-sudo usermod -aG docker $USER
+curl -fsSL https://get.docker.com | sh
+# Next add your user to run docker (rootles mode)
+# don't do dockerd-rootless-setuptool.sh install; it limits the number of uid / gids available for user. Causes issues for some docker images.
+sudo newgrp docker
+sudo usermod -aG docker <your-username>
 ```
 
 2. Clone the repository
@@ -116,17 +148,7 @@ cd arcvmware-util/squid-proxy-setup
         >   **Custom command execution**<br/>
         >   Some custom command can be executed through `setup.sh` script. `setup.sh` script will be executed just before starting the squid proxy server.
 
-    4.  Before starting the squid container, set the environment variable `SQUID_AUTH_CREDS`.
-        It is required for the healthcheck cronjob.
-        ```bash
-        export SQUID_AUTH_CREDS="$username:$password"
-        ```
-        If the proxy server is not configured with basic auth, then set the value to `none`.
-        ```bash
-        export SQUID_AUTH_CREDS=none
-        ```
-
-    5.  Start proxy: [`./start.sh`](./start.sh)<br/>
+    4.  Start proxy: [`./start.sh`](./start.sh)<br/>
         View access logs: [`./tail_access_logs.sh`](./tail_access_logs.sh)<br/>
         Stop proxy: [`./stop.sh`](./stop.sh)<br/>
     
@@ -148,21 +170,71 @@ We have to make this VM act as a router by enabling NAT.
     sudo sysctl -p /etc/sysctl.conf
     ```
 
-- ### Set ip table NAT rules
-    Check out this [tutorial][nat_iptables] to get an idea of NAT and iptables.
-    We are redirecting all the http and https traffic to the squid proxy server.
-    ```bash
-    # $iface : The interface connected to the private network. eg: eth0
-    # $http_proxy_port = The proxy port for http (non-SSL proxy). eg: 3128
-    # $https_proxy_port = The proxy port for https (SSL proxy). eg: 3129
-    
-    sudo iptables -t nat -A PREROUTING -i $iface -p tcp --dport 80 -j REDIRECT --to-port $http_proxy_port
-    sudo iptables -t nat -A PREROUTING -i $iface -p tcp --dport 443 -j REDIRECT --to-port $https_proxy_port
-    sudo iptables -t nat -A POSTROUTING -o $iface -p tcp -j MASQUERADE
+  ### Disable ipv6 (Optional)
+
+    Sometimes, ipv6 might cause conflicts. You can disable it if not required.
+
+    To disable ipv6, add the following line to `/etc/sysctl.conf`:<br/>
+    ```ini
+    net.ipv6.conf.all.disable_ipv6 = 1
+    net.ipv6.conf.default.disable_ipv6 = 1
+    net.ipv6.conf.lo.disable_ipv6 = 1
     ```
-    Use `iptables-persistent` to persist these rules; `sudo apt-get install iptables-persistent`
+
+- ### Set iptables NAT rules
+    Check out this [tutorial][nat_iptables] to get an idea of NAT and iptables.
+    This is another [exhaustive tutorial][exhaustive_iptables_tutorial] on iptables.
+
+    1. Run the following commands to set the NAT rules:
+        ```bash
+        export ifExt=ens160 # The interface connected to the external interface (internet-segment)
+        export ifPriv=ens192 # The interface connected to the private network (proxy-segment)
+        export http_proxy_port=3130 # The proxy port for http traffic (non-SSL proxy)
+        export https_proxy_port=3131 # The proxy port for https traffic (SSL proxy)
+        sudo iptables -t nat -A PREROUTING -i $ifPriv -p tcp --dport 80 -j REDIRECT --to-port  $http_proxy_port
+        sudo iptables -t nat -A PREROUTING -i $ifPriv -p tcp --dport 443 -j REDIRECT --to-port  $https_proxy_port
+        sudo iptables -t nat -A POSTROUTING -o $ifExt -j MASQUERADE
+        ```
+
+        [Set of alternative commands](#iptables-alt)
+
+        We have 3 iptable commands here:
+        1. The first command redirects all the incoming traffic arriving through proxy-segment on port 80 to port 3130 (the port where the non-SSL proxy is running).
+        2. The second command redirects all the incoming traffic arriving through proxy-segment on port 443 to port 3131 (the port where the SSL proxy is running).
+        3. The third command is for NAT. It changes the source IP address of **all the packets** going out of the machine through the `internet-segment` interface to the IP address of the `internet-segment` interface. `MASQUERADE` is used to dynamically change the source IP address of the packets, since the IP address of the `internet-segment` interface might change. It's similar to `SNAT` but with `MASQUERADE` the source IP address is dynamically changed.
+
+        > [!IMPORTANT]
+        > It is important to note that we should redirect HTTP traffic to the non-SSL port (3130 in our config)
+        > If we redirect the HTTP traffic to the SSL port (3129), we get the error: empty reply from server.
+
+    You can also export and import the iptables rules using the following commands:
+    ```bash
+    iptables-save > /my/ip-rules.conf
+    iptables-restore < /my/ip-rules.conf
+    ```
+
+    2. Persist the iptables rules
+        
+        Use `iptables-persistent` to persist these rules; `sudo apt install iptables-persistent`.
+        The rules will be saved in `/etc/iptables/rules.v4` and `/etc/iptables/rules.v6`.
+        From the rules, you can simply filter out the required rules, and replace the file `/etc/iptables/rules.v4` with the required rules. It might look like this:
+
+        ```ini
+        *nat
+        -A PREROUTING -i ens192 -p tcp -m tcp --dport 80 -j REDIRECT --to-port 3130
+        -A PREROUTING -i ens192 -p tcp -m tcp --dport 443 -j REDIRECT --to-port 3131
+        -A POSTROUTING -o ens160 -j MASQUERADE
+        COMMIT
+        # Completed on Fri Jul 12 10:00:51 2024
+        ```
+
 
 ## 3. Machine behind proxy server
+
+> [!NOTE]
+> For transparent proxy (aka firewall), we do not need to set any env variables.
+> The proxy server will automatically intercept the traffic and forward it to the destination.
+> The env variables are required only for explicit proxy.
 
 Create another VM which is connected to only `proxy-segment`. We will be using this as the dev machine for testing proxy scenarios.
 
@@ -212,3 +284,50 @@ To pass environment variables during sudo, you can run `sudo -E`
 [7]: https://manuals.gfi.com/en/kerio/connect/content/server-configuration/ssl-certificates/adding-trusted-root-certificates-to-the-server-1605.html
 [dnsmasq_arch]: https://wiki.archlinux.org/title/dnsmasq
 [nat_iptables]: https://www.karlrupp.net/en/computer/nat_tutorial
+[exhaustive_iptables_tutorial]: https://rlworkman.net/howtos/iptables/iptables-tutorial.html#TRAVERSINGOFTABLES
+
+### Aside
+
+1. Link contains interesting logformat:
+    https://kenmoini.com/post/2024/05/outbound-squid-proxy/
+
+2. <span id="iptables-alt">Alternative commands for `iptables`. But these commands will break if the IP address of the `internet-segment` interface changes.</span>
+    ```bash
+    export ifExt=ens160 # The interface connected to the external interface (internet-segment)
+    export ifPriv=ens192 # The interface connected to the private network (proxy-segment)
+    export http_proxy_port=3130 # The proxy port for http traffic (non-SSL proxy)
+    export https_proxy_port=3131 # The proxy port for https traffic (SSL proxy)
+    export external_ip=$(ip addr show dev $ifExt | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1)
+    sudo iptables -t nat -A PREROUTING -i $ifPriv -p tcp --dport 80 -j DNAT --to $external_ip:$http_proxy_port
+    sudo iptables -t nat -A PREROUTING -i $ifPriv -p tcp --dport 443 -j DNAT --to $external_ip:$https_proxy_port
+    sudo iptables -t nat -A POSTROUTING -o $ifExt -j MASQUERADE
+    ```
+
+<details>
+    <summary>How to connect through a Jumpserver to a VM inside private network</summary>
+
+- 100.101.102.103 : IP of the jumpserver (eg, where tailscale is installed)
+
+- 172.17.100.101: IP of the transparent proxy server / router VM (connected to both public and private network). It's internal IP is 192.68.0.1
+
+- 192.168.0.100: IP of the client VM inside the private network
+
+**on the jumpserver (IP: 100.101.102.103)**
+
+```bash
+sudo iptables -t nat -A PREROUTING -i tailscale0 -p tcp --dport 2222 -j DNAT --to-destination 172.17.100.101:2222
+```
+
+**on the proxy server / router of private network (IP: 172.17.100.101)**
+
+```bash
+sudo iptables -t nat -A PREROUTING -i ens160 -p tcp --dport 2222 -j DNAT --to-destination 192.168.0.100:22
+```
+
+Now we can ssh into the client VM from the jumpserver using the command:
+
+```bash
+ssh -p 2222 arcvmware@100.101.102.103
+```
+
+</details>

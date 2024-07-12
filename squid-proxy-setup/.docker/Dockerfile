@@ -1,5 +1,5 @@
 FROM ubuntu:22.04
-ARG SQUID_VERSION=5.7
+ARG SQUID_VERSION=6.10
 
 # Dependencies from
 # https://github.com/kinkie/dockerfiles/blob/8f1468c3016fba0393f13c3a19662a5fc05ca9ab/ubuntu-jammy/Dockerfile
