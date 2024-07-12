@@ -53,8 +53,10 @@ sudo groupadd -g 456 squid && \
 
 # NOTE: We can also add the flags mentioned below for changing the directory paths of squid files.
 # Currently, systemd unit file is causing issues, so we are directly running squid binary.
+# This is the unit file: https://github.com/squid-cache/squid/blob/master/tools/systemd/squid.service
 # TODO: Check how to make systemd unit file work, and if these flags are related to that.
 # https://wiki.squid-cache.org/SquidFaq/CompilingSquid#debian-ubuntu
+# 
 
 mkdir -p /tmp/build && \
   cd /tmp/build && \
@@ -88,6 +90,8 @@ sudo ln -s "$files_dir/proxy_ca.key" /usr/local/squid/etc/
 # Add squid to PATH
 sudo ln -s /usr/local/squid/sbin/squid /usr/sbin/
 
+echo "Creating a wrapper script 'sq' to manage squid service. Run 'sq' for more options."
+
 cat <<'EOF' | sudo tee /usr/local/bin/sq > /dev/null
 #!/bin/bash
 
@@ -111,10 +115,34 @@ else
 fi
 EOF
 
+echo "Adding squid service to systemd to start on boot. It will run /usr/local/bin/sq start"
+
+cat <<'EOF' | sudo tee /etc/systemd/system/squid.service > /dev/null
+[Unit]
+Description=Squid Proxy Server
+After=network.target network-online.target nss-lookup.target
+
+[Service]
+ExecStart=/usr/local/bin/sq start
+ExecStop=/usr/local/bin/sq stop
+ExecReload=/bin/kill -HUP $MAINPID
+User=root
+Group=root
+Type=forking
+StandardError=file:/usr/local/squid/var/logs/cache.log
+StandardOutput=file:/usr/local/squid/var/logs/access.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable squid
+
 # rotate logs every sunday
 echo "0 0 * * 0 /usr/local/squid/sbin/squid -k rotate" | sudo crontab -
 
 sudo chmod +x /usr/local/bin/sq
 # start squid on boot
 
-echo "Squid setup complete. You can now start squid using 'sq start' command. Run 'sq' for more options."
+echo "Squid setup complete. Start squid using 'systemctl start squid'. Run 'sq' for more options."

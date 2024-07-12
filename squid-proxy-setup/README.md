@@ -203,15 +203,38 @@ We have to make this VM act as a router by enabling NAT.
         2. The second command redirects all the incoming traffic arriving through proxy-segment on port 443 to port 3131 (the port where the SSL proxy is running).
         3. The third command is for NAT. It changes the source IP address of **all the packets** going out of the machine through the `internet-segment` interface to the IP address of the `internet-segment` interface. `MASQUERADE` is used to dynamically change the source IP address of the packets, since the IP address of the `internet-segment` interface might change. It's similar to `SNAT` but with `MASQUERADE` the source IP address is dynamically changed.
 
+        > [!IMPORTANT]
+        > It is important to note that we should redirect HTTP traffic to the non-SSL port (3130 in our config)
+        > If we redirect the HTTP traffic to the SSL port (3129), we get the error: empty reply from server.
+
     You can also export and import the iptables rules using the following commands:
     ```bash
     iptables-save > /my/ip-rules.conf
     iptables-restore < /my/ip-rules.conf
     ```
 
-    Use `iptables-persistent` to persist these rules; `sudo apt install iptables-persistent`
+    2. Persist the iptables rules
+        
+        Use `iptables-persistent` to persist these rules; `sudo apt install iptables-persistent`.
+        The rules will be saved in `/etc/iptables/rules.v4` and `/etc/iptables/rules.v6`.
+        From the rules, you can simply filter out the required rules, and replace the file `/etc/iptables/rules.v4` with the required rules. It might look like this:
+
+        ```ini
+        *nat
+        -A PREROUTING -i ens192 -p tcp -m tcp --dport 80 -j REDIRECT --to-port 3130
+        -A PREROUTING -i ens192 -p tcp -m tcp --dport 443 -j REDIRECT --to-port 3131
+        -A POSTROUTING -o ens160 -j MASQUERADE
+        COMMIT
+        # Completed on Fri Jul 12 10:00:51 2024
+        ```
+
 
 ## 3. Machine behind proxy server
+
+> [!NOTE]
+> For transparent proxy (aka firewall), we do not need to set any env variables.
+> The proxy server will automatically intercept the traffic and forward it to the destination.
+> The env variables are required only for explicit proxy.
 
 Create another VM which is connected to only `proxy-segment`. We will be using this as the dev machine for testing proxy scenarios.
 
