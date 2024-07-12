@@ -32,14 +32,19 @@ The network topology should look like this.
     You can set via GUI like this:
     ![Static IP](./assets/static-ip.jpg)
 
+
+> [!NOTE]
+> Here we are using `8.8.8.8` as our upstream DNS server.
+> You can use any other DNS server as per your requirement.
+
+> [!IMPORTANT]
+> From previous experience, DNSServer created by dnsmasq isn't that reliable (might start hanging up after a few days), and it's better to offload the DNS resolution to an external DNS server.
+> Hence Case 1 is recommended.
+
 3.  Run DHCP and DNS Server on the VM. [Ref1][3], [Ref2][4]
     
     If you don't want to set static network configuration for all VMs connected to `proxy-segment`, you will need a DHCP Server. We can install the DHCP server on the same machine where proxy server will be installed. We could have a DNS server in the network too in order to resolve local addresses.<br/>
     [`dnsmasq`][dnsmasq_arch] can serve for both the purposes.
-
-    > [!NOTE]
-    > Here we are using `8.8.8.8` as our upstream DNS server.
-    > You can use any other DNS server as per your requirement.
 
     1.  Install dnsmasq
         
@@ -57,10 +62,6 @@ The network topology should look like this.
         ```
       
     2.  Edit file `/etc/dnsmasq.conf`.
-
-        > [!IMPORTANT]
-        > From previous experience, DNSServer created by dnsmasq isn't that reliable (might start hanging up after a few days), and it's better to offload the DNS resolution to an external DNS server.
-        > Hence Case 1 is recommended.
 
         #### Case 1: Just for DHCP
         ```conf
@@ -160,7 +161,7 @@ The machine where we configure transparent proxy will have to be used
 as the default gateway for the clients using transparent proxy.
 We have to make this VM act as a router by enabling NAT.
 
-- ### Enable ip forwarding
+  ### Enable ip forwarding
     open file "/etc/sysctl.conf" and uncomment below
     ```
     net.ipv4.ip_forward = 1
@@ -181,9 +182,13 @@ We have to make this VM act as a router by enabling NAT.
     net.ipv6.conf.lo.disable_ipv6 = 1
     ```
 
-- ### Set iptables NAT rules
+  ### Set iptables NAT rules
     Check out this [tutorial][nat_iptables] to get an idea of NAT and iptables.
     This is another [exhaustive tutorial][exhaustive_iptables_tutorial] on iptables.
+
+> [!IMPORTANT]
+> It is important to note that we should redirect HTTP traffic to the non-SSL port (3130 in our config)
+> If we redirect the HTTP traffic to the SSL port (3129), we get the error: empty reply from server.
 
     1. Run the following commands to set the NAT rules:
         ```bash
@@ -202,10 +207,6 @@ We have to make this VM act as a router by enabling NAT.
         1. The first command redirects all the incoming traffic arriving through proxy-segment on port 80 to port 3130 (the port where the non-SSL proxy is running).
         2. The second command redirects all the incoming traffic arriving through proxy-segment on port 443 to port 3131 (the port where the SSL proxy is running).
         3. The third command is for NAT. It changes the source IP address of **all the packets** going out of the machine through the `internet-segment` interface to the IP address of the `internet-segment` interface. `MASQUERADE` is used to dynamically change the source IP address of the packets, since the IP address of the `internet-segment` interface might change. It's similar to `SNAT` but with `MASQUERADE` the source IP address is dynamically changed.
-
-        > [!IMPORTANT]
-        > It is important to note that we should redirect HTTP traffic to the non-SSL port (3130 in our config)
-        > If we redirect the HTTP traffic to the SSL port (3129), we get the error: empty reply from server.
 
     You can also export and import the iptables rules using the following commands:
     ```bash
