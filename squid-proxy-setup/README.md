@@ -64,7 +64,7 @@ The network topology should look like this.
     2.  Edit file `/etc/dnsmasq.conf`.
 
         #### Case 1: Just for DHCP
-        ```conf
+        ```ini
         listen-address=192.168.0.1
         dhcp-range=192.168.0.100,192.168.0.240,12h
         dhcp-option=option:router,192.168.0.1
@@ -74,7 +74,7 @@ The network topology should look like this.
         ```
 
         #### Case 2: For DNS and DHCP both
-        ```conf
+        ```ini
         listen-address=192.168.0.1
         server=8.8.8.8
         dhcp-range=192.168.0.100,192.168.0.240,12h
@@ -95,6 +95,7 @@ The network topology should look like this.
 
 > [!NOTE]
 > For standalone install (non-container) in Ubuntu, we can use the [`standalone-install.sh`](./standalone-install.sh) script.
+> Containerized squid can have performance issues, and it's better to use standalone squid server. 
 
 1. Install docker [Ref][5]
 
@@ -161,52 +162,63 @@ The machine where we configure transparent proxy will have to be used
 as the default gateway for the clients using transparent proxy.
 We have to make this VM act as a router by enabling NAT.
 
-  ### Enable ip forwarding
-    open file "/etc/sysctl.conf" and uncomment below
-    ```
-    net.ipv4.ip_forward = 1
-    ```
-    Reload sysctl
-    ```bash
-    sudo sysctl -p /etc/sysctl.conf
-    ```
+> [!NOTE]
+> By default transparent proxy is disabled in the squid conf file included in this repo. You can enable it [by uncommenting the lines](./files/squid.conf#L40).
 
-  ### Disable ipv6 (Optional)
+### Enable ip forwarding
 
-    Sometimes, ipv6 might cause conflicts. You can disable it if not required.
+open file "/etc/sysctl.conf" and uncomment below
+```ini
+net.ipv4.ip_forward = 1
+```
+Reload sysctl
+```bash
+sudo sysctl -p /etc/sysctl.conf
+```
 
-    To disable ipv6, add the following line to `/etc/sysctl.conf`:<br/>
-    ```ini
-    net.ipv6.conf.all.disable_ipv6 = 1
-    net.ipv6.conf.default.disable_ipv6 = 1
-    net.ipv6.conf.lo.disable_ipv6 = 1
-    ```
+### Disable ipv6 (Optional)
 
-  ### Set iptables NAT rules
-    Check out this [tutorial][nat_iptables] to get an idea of NAT and iptables.
-    This is another [exhaustive tutorial][exhaustive_iptables_tutorial] on iptables.
+Sometimes, ipv6 might cause conflicts. You can disable it if not required.
+
+To disable ipv6, add the following line to `/etc/sysctl.conf`:<br/>
+```ini
+net.ipv6.conf.all.disable_ipv6 = 1
+net.ipv6.conf.default.disable_ipv6 = 1
+net.ipv6.conf.lo.disable_ipv6 = 1
+```
+
+Reload sysctl
+```bash
+sudo sysctl -p /etc/sysctl.conf
+```
+
+### Set iptables NAT rules
+
+Check out this [tutorial][nat_iptables] to get an idea of NAT and iptables.
+This is another [exhaustive tutorial][exhaustive_iptables_tutorial] on iptables.
 
 > [!IMPORTANT]
 > It is important to note that we should redirect HTTP traffic to the non-SSL port (3130 in our config)
 > If we redirect the HTTP traffic to the SSL port (3129), we get the error: empty reply from server.
 
-    1. Run the following commands to set the NAT rules:
-        ```bash
-        export ifExt=ens160 # The interface connected to the external interface (internet-segment)
-        export ifPriv=ens192 # The interface connected to the private network (proxy-segment)
-        export http_proxy_port=3130 # The proxy port for http traffic (non-SSL proxy)
-        export https_proxy_port=3131 # The proxy port for https traffic (SSL proxy)
-        sudo iptables -t nat -A PREROUTING -i $ifPriv -p tcp --dport 80 -j REDIRECT --to-port  $http_proxy_port
-        sudo iptables -t nat -A PREROUTING -i $ifPriv -p tcp --dport 443 -j REDIRECT --to-port  $https_proxy_port
-        sudo iptables -t nat -A POSTROUTING -o $ifExt -j MASQUERADE
-        ```
+1. Run the following commands to set the NAT rules:
 
-        [Set of alternative commands](#iptables-alt)
+    ```bash
+    export ifExt=ens160 # The interface connected to the external interface (internet-segment)
+    export ifPriv=ens192 # The interface connected to the private network (proxy-segment)
+    export http_proxy_port=3130 # The proxy port for http traffic (non-SSL proxy)
+    export https_proxy_port=3131 # The proxy port for https traffic (SSL proxy)
+    sudo iptables -t nat -A PREROUTING -i $ifPriv -p tcp --dport 80 -j REDIRECT --to-port $http_proxy_port
+    sudo iptables -t nat -A PREROUTING -i $ifPriv -p tcp --dport 443 -j REDIRECT --to-port $https_proxy_port
+    sudo iptables -t nat -A POSTROUTING -o $ifExt -j MASQUERADE
+    ```
 
-        We have 3 iptable commands here:
-        1. The first command redirects all the incoming traffic arriving through proxy-segment on port 80 to port 3130 (the port where the non-SSL proxy is running).
-        2. The second command redirects all the incoming traffic arriving through proxy-segment on port 443 to port 3131 (the port where the SSL proxy is running).
-        3. The third command is for NAT. It changes the source IP address of **all the packets** going out of the machine through the `internet-segment` interface to the IP address of the `internet-segment` interface. `MASQUERADE` is used to dynamically change the source IP address of the packets, since the IP address of the `internet-segment` interface might change. It's similar to `SNAT` but with `MASQUERADE` the source IP address is dynamically changed.
+    We have 3 iptable commands here:
+    1. The first command redirects all the incoming traffic arriving through proxy-segment on port 80 to port 3130 (the port where the non-SSL proxy is running).
+    2. The second command redirects all the incoming traffic arriving through proxy-segment on port 443 to port 3131 (the port where the SSL proxy is running).
+    3. The third command is for NAT. It changes the source IP address of **all the packets** going out of the machine through the `internet-segment` interface to the IP address of the `internet-segment` interface. `MASQUERADE` is used to dynamically change the source IP address of the packets, since the IP address of the `internet-segment` interface might change. It's similar to `SNAT` but with `MASQUERADE` the source IP address is dynamically changed.
+
+    [Set of alternative commands](#iptables-alt)
 
     You can also export and import the iptables rules using the following commands:
     ```bash
@@ -214,20 +226,20 @@ We have to make this VM act as a router by enabling NAT.
     iptables-restore < /my/ip-rules.conf
     ```
 
-    2. Persist the iptables rules
-        
-        Use `iptables-persistent` to persist these rules; `sudo apt install iptables-persistent`.
-        The rules will be saved in `/etc/iptables/rules.v4` and `/etc/iptables/rules.v6`.
-        From the rules, you can simply filter out the required rules, and replace the file `/etc/iptables/rules.v4` with the required rules. It might look like this:
+2. Persist the iptables rules
+      
+    Use `iptables-persistent` to persist these rules; `sudo apt install iptables-persistent`.
+    The rules will be saved in `/etc/iptables/rules.v4` and `/etc/iptables/rules.v6`.
+    From the rules, you can simply filter out the required rules, and replace the file `/etc/iptables/rules.v4` with the required rules. It might look like this:
 
-        ```ini
-        *nat
-        -A PREROUTING -i ens192 -p tcp -m tcp --dport 80 -j REDIRECT --to-port 3130
-        -A PREROUTING -i ens192 -p tcp -m tcp --dport 443 -j REDIRECT --to-port 3131
-        -A POSTROUTING -o ens160 -j MASQUERADE
-        COMMIT
-        # Completed on Fri Jul 12 10:00:51 2024
-        ```
+    ```ini
+    *nat
+    -A PREROUTING -i ens192 -p tcp -m tcp --dport 80 -j REDIRECT --to-port 3130
+    -A PREROUTING -i ens192 -p tcp -m tcp --dport 443 -j REDIRECT --to-port 3131
+    -A POSTROUTING -o ens160 -j MASQUERADE
+    COMMIT
+    # Completed on Fri Jul 12 10:00:51 2024
+    ```
 
 
 ## 3. Machine behind proxy server
@@ -243,10 +255,9 @@ Once the machine starts up it should receive an IP address in the range `192.168
 
 For using SSL proxy you need to trust the `proxy-ca.crt` file that was generated in the proxy server and included in the squid configuration file.
 Copy the CA certificate to the client machine, and trust it. To trust it:
-  1. [add it to trusted root of the machine][7]
-  2. Set the environment variable `REQUESTS_CA_BUNDLE=/path/to/proxy-ca.crt`
+1. [add it to trusted root of the machine][7]
+2. Set the environment variable `REQUESTS_CA_BUNDLE=/path/to/proxy-ca.crt`
 
-Option `1` is the safer one.
 
 ```bash
 # Only for SSL proxy
