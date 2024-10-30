@@ -6,7 +6,7 @@ As documented in [Designated IP ranges for Arc resource bridge](https://learn.mi
 
 ## Solution Approach
 
-To avoid such overlapping IP addresses between Azure Arc resource bridge and vCenter Server, we can use a virtual/intermidiate IP address for the vCenter, which is outside the `10.244.*` range.
+To avoid such overlapping IP addresses between Azure Arc resource bridge and vCenter Server, we can use a virtual/intermidiate IP address for the vCenter Server, which is outside the `10.244.*` range.
 
 High level design will look like below.
 ![design](assets/arc-rb.png)
