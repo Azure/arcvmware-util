@@ -28,7 +28,7 @@ Hence, we can use an IP address from `192.168.0.0/16` as the VIP.
 >
 > We just need to ensure that the IP address is not used in any of the segments.
 
-> [!CAUTION]
+> [!WARNING]
 > It is important to note that OVA image upload in cloud-managed upgrade will fail
 > on Day N, because image upload will make **connection to the IP address of some ESXi host**
 > **from inside the k8s pod.** This IP will also fall in 10.244.0.0/16 range, and the host IPs
