@@ -18,7 +18,12 @@ We need to select some IP address which is not already used in any Segments. For
 3. `192.168.0.0/16`: Not used in AVS - only used in isolated networks (example proxy network setup).
 
 Hence, we can use an IP address from `192.168.0.0/16` as the VIP.
-TODO: Test what happens when we try reaching `192.168.0.0/16` from a VM inside an isolated network.
+
+> [!NOTE]
+> Which IP to choose?
+> We could have also used some other IP in private address range, e.g., `10.220.0.2`, which might work as well - typically AVS does not use the full `/8` range.
+> If we use a public IP, eg, `193.168.0.2`, then we lose access to the actual server in the internet which has this IP.
+> We just need to ensure that the IP address is not used in any of the segments.
 
 ## Unsuccessful Attempt - DNAT
 
