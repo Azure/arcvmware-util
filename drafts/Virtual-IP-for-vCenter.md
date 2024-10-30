@@ -69,7 +69,7 @@ We can use the NSX-T L7 Load Balancer to achieve the same. The steps are as foll
 
 4. The communication to the vCenter happens on port 443. Hence we need some SSL certificate to be present on the load balancer. We can generate and use a self-signed certificate for this purpose in the NSX-T Manager.
 
-    Genrate Signed Certificate                                         |  Add details
+    Generate Signed Certificate                                         |  Add details
     :------------------------------------------------------:|:-------------------------:
     ![04_cert_generate.jpg](./assets/04_cert_generate.jpg)  |  ![05_cert_details.jpg](./assets/05_cert_details.jpg)
 
