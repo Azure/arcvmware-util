@@ -3,7 +3,7 @@
 
 There is one AVS customer whose VCenter IP address (`10.244.0.2`) falls in the appliance pod CIDR range (`10.244.0.0/16`). That caused the routing inside the appliance VM into thinking that `10.244.0.2` is an address inside the pod network, and the traffic could not be routed out of the appliance VM.
 
-## Solution
+## Solution Approach
 
 If we can use a virtual IP for the vCenter, which is outside the `10.244.*` range, then the routing issue can be resolved.
 
@@ -22,6 +22,10 @@ TODO: Test what happens when we try reaching `192.168.0.0/16` from a VM inside a
 
 ## Unsuccessful Attempt - DNAT
 
+<details>
+
+<summary>Click to view details</summary>
+
 We tried adding a DNAT rule in the NSX-T NAT so that packets destined to `192.168.0.2` are DNATed to `10.0.0.2`. However, the following happens:
 1. After leaving the source machine, destination `192.168.0.2` is translated to `10.0.0.2`.
 2. VCenter receives the packet and does `ACK`.
@@ -30,6 +34,8 @@ We tried adding a DNAT rule in the NSX-T NAT so that packets destined to `192.16
 We don't know the actual reason for this yet.
 
 ![avs_nsx_failed_nat.jpg](./assets/failed_nat.jpg)
+
+</details>
 
 ## Successful Attempt - L7 Load Balancer
 
