@@ -1,13 +1,18 @@
 
 ### Context
 
-There is one AVS customer whose VCenter IP address (`10.244.0.2`) falls in the appliance pod CIDR range (`10.244.0.0/16`). That caused the routing inside the appliance VM into thinking that `10.244.0.2` is an address inside the pod network, and the traffic could not be routed out of the appliance VM.
+As documented in (Designated IP ranges for Arc resource bridge)[https://learn.microsoft.com/azure/azure-arc/resource-bridge/network-requirements#designated-ip-ranges-for-arc-resource-bridge], IP address `10.244.0.0/16` is reserved internally. If customers are using address space which includes this reserved IP address as a AVS private cloud address (e.g. `10.244.0.0/22`) then network traffic originating from Arc resource bridge towards AVS vCenter Server will fail. This behaviour is caused due to appliance VM treating `10.244.0.2` is an address inside the pod network, and the traffic could not be routed out of the appliance VM.
 
 ## Solution Approach
 
-If we can use a virtual IP for the vCenter, which is outside the `10.244.*` range, then the routing issue can be resolved.
+To avoid such overlapping IP addresses between Azure Arc resource bridge and vCenter Server, we can use a virtual/intermidiate IP address for the vCenter, which is outside the `10.244.*` range.
 
-We need to select some IP address which is not already used in any Segments. For example, in the AVS setup `VMWAREAVS-arcprivatecloudsfte`, the RFC 1918 addresses which are used / not used are as follows:
+High level design will look like below.
+![design](assets/arc-rb.png)
+
+vCenter Server Segment address space (`10.244.0.0/22`) and Arc Resource Bridge Segment (`10.244.0.0/16`) are replaced by alternate address spaces in this guidance. However, idea remains same - to allow connectivity via another IP address to avoid IP address overlap.
+
+We need to select some IP address which is not already used in any Segments. For example, in the AVS lab setup `VMWAREAVS-arcprivatecloudsfte`, the RFC 1918 addresses which are used / not used are as follows:
 
 1. `10.0.0.0/8` : Used by AVS
    ![avs_connectivty_address_block_for_private_cloud.jpg](./assets/avs_10_0_0_0.jpg)
@@ -15,9 +20,11 @@ We need to select some IP address which is not already used in any Segments. For
 2. `172.16.0.0/12`: Used / will be used by the segments
     ![avs_nsx_segments.jpg](./assets/nsx_172_16_0_0.jpg)
 
-3. `192.168.0.0/16`: Not used in AVS - only used in isolated networks (example proxy network setup).
+3. `192.168.0.0/16`: Not used in AVS segments - only used in isolated networks (example proxy network setup).
 
-Hence, we can use an IP address from `192.168.0.0/16` as the VIP.
+4. Ensure that `192.168.0.0/16` is not used as either DNS or DHCP address.
+
+Hence, we can use an IP address from `192.168.0.0/16` as an intermediate IP address so that Arc resource bridge can use it to connect with vCenter Server.
 
 > [!NOTE]
 > Which IP to choose?
@@ -59,7 +66,7 @@ We can use the NSX-T L7 Load Balancer to achieve the same. The steps are as foll
 
     ![01_server_pool.jpg](./assets/01_server_pool.jpg)
 
-2. Add members to the server pool. In this case, we have only one member which is the VCenter IP address: `10.0.0.2`.
+2. Add members to the server pool. In this case, we have only one member which is the VCenter Server IP address: `10.0.0.2`.
 
     ![02_server_pool_members.jpg](./assets/02_server_pool_members.jpg)
 
