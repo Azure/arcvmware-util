@@ -69,9 +69,9 @@ We can use the NSX-T L7 Load Balancer to achieve the same. The steps are as foll
 
 4. The communication to the vCenter happens on port 443. Hence we need some SSL certificate to be present on the load balancer. We can generate and use a self-signed certificate for this purpose in the NSX-T Manager.
 
-    ![04_cert_generate.jpg](./assets/04_cert_generate.jpg)
-
-    ![05_cert_details.jpg](./assets/05_cert_details.jpg)
+    1.                                                      |  2.
+    :------------------------------------------------------:|:-------------------------:
+    ![04_cert_generate.jpg](./assets/04_cert_generate.jpg)  |  ![05_cert_details.jpg](./assets/05_cert_details.jpg)
 
 5. Create a virtual server. The virtual server is the virtual IP address which the clients will use to connect to the vCenter. In this case, it is `192.168.0.2`.
     - IP Address: `192.168.0.2`
@@ -83,9 +83,9 @@ We can use the NSX-T L7 Load Balancer to achieve the same. The steps are as foll
 
 6. Click on `SSL Configuration`, enable both Client and Server SSL, and select the certificate which we created in step 4.
 
-    ![07_ssl_client.jpg](./assets/07_ssl_client.jpg)
-
-    ![08_ssl_server.jpg](./assets/08_ssl_server.jpg)
+    Client SSL                                        |  Server SSL
+    :------------------------------------------------:|:-------------------------:
+    ![07_ssl_client.jpg](./assets/07_ssl_client.jpg)  |  ![08_ssl_server.jpg](./assets/08_ssl_server.jpg)
 
 7. Now, we can access the vCenter using the virtual IP address `192.168.0.2`.
 
