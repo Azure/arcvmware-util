@@ -1,3 +1,4 @@
+## Virtual IP for vCenter
 
 ### Context
 
@@ -26,6 +27,15 @@ Hence, we can use an IP address from `192.168.0.0/16` as the VIP.
 > If we use a public IP, eg, `193.168.0.2`, then we lose access to the actual server in the internet which has this IP.
 >
 > We just need to ensure that the IP address is not used in any of the segments.
+
+> [!CRITICAL]
+> It is important to note that OVA image upload in cloud-managed upgrade will fail
+> on Day N, because image upload will make **connection to the IP address of some ESXi host**
+> **from inside the k8s pod.** This IP will also fall in 10.244.0.0/16 range, and the host IPs
+> are typically dynamic (hosts can come and go, ephemeral in AVS). Hence, it will be difficult to provide virtual IP for ESXi hosts.
+>
+> However, manual upgrade (`az arcappliance updgrade`) will work 
+> since it uploads image from the management machine.
 
 ## Unsuccessful Attempt - DNAT
 
