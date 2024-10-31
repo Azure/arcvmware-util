@@ -9,17 +9,17 @@ As documented in [Designated IP ranges for Arc resource bridge](https://learn.mi
 To avoid such overlapping IP addresses between Azure Arc resource bridge and vCenter Server, we can use a virtual/intermidiate IP address for the vCenter Server, which is outside the `10.244.*` range.
 
 High level design will look like below.
-![design](assets/arc-rb.png)
+![design](assets/arc-rb.webp)
 
 vCenter Server Segment address space (`10.244.0.0/22`) and Arc Resource Bridge Segment (`10.244.0.0/16`) are replaced by alternate address spaces in this guidance. However, idea remains same - to allow connectivity via another IP address to avoid IP address overlap.
 
 We need to select some IP address which is not already used in any Segments. For example, in the AVS lab setup `VMWAREAVS-arcprivatecloudsfte`, the RFC 1918 addresses which are used / not used are as follows:
 
 1. `10.0.0.0/8` : Used by AVS
-   ![avs_connectivty_address_block_for_private_cloud.jpg](./assets/avs_10_0_0_0.jpg)
+   ![avs_connectivty_address_block_for_private_cloud.jpg](./assets/avs_10_0_0_0.webp)
 
 2. `172.16.0.0/12`: Used / will be used by the segments
-    ![avs_nsx_segments.jpg](./assets/nsx_172_16_0_0.jpg)
+    ![avs_nsx_segments.jpg](./assets/nsx_172_16_0_0.webp)
 
 3. `192.168.0.0/16`: Not used in AVS segments - only used in isolated networks (example proxy network setup).
 
@@ -57,7 +57,7 @@ We tried adding a DNAT rule in the NSX-T NAT so that packets destined to `192.16
 
 We don't know the actual reason for this yet.
 
-![avs_nsx_failed_nat.jpg](./assets/failed_nat.jpg)
+![avs_nsx_failed_nat.jpg](./assets/failed_nat.webp)
 
 </details>
 
@@ -74,21 +74,21 @@ We can use the NSX-T L7 Load Balancer to achieve the same. The steps are as foll
 
     Since, we are using a virtual IP for the Load Balancer, which does not exist in the AVS, we should not translate the Source IP address of the packet to the Load Balancer IP address. If we map it, then the ACK packets from the VCenter will be sent to the Load Balancer IP address which does not exist, and we will get 504 Gateway Timeout error.
 
-    ![01_server_pool.jpg](./assets/01_server_pool.jpg)
+    ![01_server_pool.jpg](./assets/01_server_pool.webp)
 
 2. Add members to the server pool. In this case, we have only one member which is the VCenter Server IP address: `10.0.0.2`.
 
-    ![02_server_pool_members.jpg](./assets/02_server_pool_members.jpg)
+    ![02_server_pool_members.jpg](./assets/02_server_pool_members.webp)
 
 3. Create the load balancer (let the name be `vc-lb`)
 
-    ![03_load_balancer.jpg](./assets/03_load_balancer.jpg)
+    ![03_load_balancer.jpg](./assets/03_load_balancer.webp)
 
 4. The communication to the vCenter happens on port 443. Hence we need some SSL certificate to be present on the load balancer. We can generate and use a self-signed certificate for this purpose in the NSX-T Manager.
 
     Generate Signed Certificate                                         |  Add details
     :------------------------------------------------------:|:-------------------------:
-    ![04_cert_generate.jpg](./assets/04_cert_generate.jpg)  |  ![05_cert_details.jpg](./assets/05_cert_details.jpg)
+    ![04_cert_generate.jpg](./assets/04_cert_generate.webp)  |  ![05_cert_details.jpg](./assets/05_cert_details.webp)
 
 5. Create a virtual server. The virtual server is the virtual IP address which the clients will use to connect to the vCenter. In this case, it is `192.168.0.2`.
     - IP Address: `192.168.0.2`
@@ -96,13 +96,13 @@ We can use the NSX-T L7 Load Balancer to achieve the same. The steps are as foll
     - Load Balancer: `vc-lb` (from step 3)
     - Server Pool: `vc-server-pool` (from step 1)
 
-    ![06_virtual_server.jpg](./assets/06_virtual_server.jpg)
+    ![06_virtual_server.jpg](./assets/06_virtual_server.webp)
 
 6. Click on `SSL Configuration`, enable both Client and Server SSL, and select the certificate which we created in step 4.
 
     Client SSL                                        |  Server SSL
     :------------------------------------------------:|:-------------------------:
-    ![07_ssl_client.jpg](./assets/07_ssl_client.jpg)  |  ![08_ssl_server.jpg](./assets/08_ssl_server.jpg)
+    ![07_ssl_client.jpg](./assets/07_ssl_client.webp)  |  ![08_ssl_server.jpg](./assets/08_ssl_server.webp)
 
 7. Now, we can access the vCenter using the virtual IP address `192.168.0.2`.
 
