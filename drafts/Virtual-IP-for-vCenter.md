@@ -2,7 +2,7 @@
 
 ### Context
 
-As documented in (Designated IP ranges for Arc resource bridge)[https://learn.microsoft.com/azure/azure-arc/resource-bridge/network-requirements#designated-ip-ranges-for-arc-resource-bridge], IP address `10.244.0.0/16` is reserved internally. If customers are using address space which includes this reserved IP address as a AVS private cloud address (e.g. `10.244.0.0/22`) then network traffic originating from Arc resource bridge towards AVS vCenter Server will fail. This behaviour is caused due to appliance VM treating `10.244.0.2` is an address inside the pod network, and the traffic could not be routed out of the appliance VM.
+As documented in [Designated IP ranges for Arc resource bridge](https://learn.microsoft.com/azure/azure-arc/resource-bridge/network-requirements#designated-ip-ranges-for-arc-resource-bridge), IP address `10.244.0.0/16` is reserved internally. If customers are using address space which includes this reserved IP address as a AVS private cloud address (e.g. `10.244.0.0/22`) then network traffic originating from Arc resource bridge towards AVS vCenter Server will fail. This behaviour is caused due to appliance VM treating `10.244.0.2` is an address inside the pod network, and the traffic could not be routed out of the appliance VM.
 
 ## Solution Approach
 
@@ -38,10 +38,10 @@ Hence, we can use an IP address from `192.168.0.0/16` as an intermediate IP addr
 > [!WARNING]
 > It is important to note that OVA image upload in cloud-managed upgrade will fail
 > on Day N, because image upload will make **connection to the IP address of some ESXi host**
-> **from inside the k8s pod.** This IP will also fall in 10.244.0.0/16 range, and the host IPs
+> **from inside the k8s pod.** This IP will also fall in `10.244.0.0/16` range, and the host IPs
 > are typically dynamic (hosts can come and go, ephemeral in AVS). Hence, it will be difficult to provide virtual IP for ESXi hosts.
 >
-> However, manual upgrade (`az arcappliance updgrade`) will work 
+> However, manual upgrade (`az arcappliance upgrade`) will work 
 > since it uploads image from the management machine.
 
 ## Unsuccessful Attempt - DNAT
