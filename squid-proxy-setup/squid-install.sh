@@ -94,7 +94,6 @@ sed 's@/files@'"$files_dir"'@g' "$files_dir/squid.conf" | sudo tee /usr/local/sq
 sudo ln -s "$files_dir/proxy_ca.crt" /usr/local/squid/etc/
 sudo ln -s "$files_dir/proxy_ca.key" /usr/local/squid/etc/
 
-# Add squid to PATH
 sudo ln -s /usr/local/squid/sbin/squid /usr/sbin/
 
 echo "Creating a wrapper script 'sq' to manage squid service. Run 'sq' for more options."
@@ -103,13 +102,12 @@ cat <<'EOF' | sudo tee /usr/local/bin/sq > /dev/null
 #!/bin/bash
 
 if [ -z "$1" ]; then
-  echo "Usage: sq [start|stop|status|access|cache] [loglevel]"
+  echo "Usage: sq [start|stop|status|access|cache|logs]"
   exit 1
 fi
 
 case "$1" in
   "start")
-    # Remove @flags syntax and use proper array expansion
     sudo squid -N -d 10 -f /usr/local/squid/etc/squid.conf
     ;;
   "stop")
@@ -125,8 +123,10 @@ case "$1" in
   "cache")
     sudo tail -f /usr/local/squid/var/logs/cache.log
     ;;
+  "logs")
+    sudo journalctl -f -u squid
   *)
-    echo "Invalid command: '$1'. Usage: sq [start|stop|status|access|cache]"
+    echo "Invalid command: '$1'. Usage: sq [start|stop|status|access|cache|logs]"
     exit 1
     ;;
 esac
