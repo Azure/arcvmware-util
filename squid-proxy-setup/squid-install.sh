@@ -84,11 +84,11 @@ sudo chmod 777 /usr/local/squid/var/logs && \
   /usr/local/squid/var/cache/squid/ssl_db -M 4MB && \
   sudo chown -R squid:squid /usr/local/squid/
 
-certs_dir="$files_dir/../certs"
+certs_dir="$files_dir/../.docker/certs"
 sudo cp "$certs_dir"/microsoft.crt /usr/local/share/ca-certificates/microsoft.crt
 sudo update-ca-certificates
 
-sudo ln -s "$files_dir/squid.conf" /usr/local/squid/etc/squid.conf
+sudo ln -sf "$files_dir/squid.conf" /usr/local/squid/etc/squid.conf
 
 sed 's@/files@'"$files_dir"'@g' "$files_dir/squid.conf" | sudo tee /usr/local/squid/etc/squid.conf > /dev/null
 sudo ln -s "$files_dir/proxy_ca.crt" /usr/local/squid/etc/
@@ -108,7 +108,7 @@ fi
 
 case "$1" in
   "start")
-    sudo squid -N -d 10 -f /usr/local/squid/etc/squid.conf
+    sudo squid -N -d 1 -f /usr/local/squid/etc/squid.conf
     ;;
   "stop")
     sudo squid -k shutdown
@@ -125,6 +125,7 @@ case "$1" in
     ;;
   "logs")
     sudo journalctl -f -u squid
+    ;;
   *)
     echo "Invalid command: '$1'. Usage: sq [start|stop|status|access|cache|logs]"
     exit 1
@@ -168,6 +169,6 @@ Squid setup complete.
 Verify by running 'sudo squid -N -d 10'.
 Debug level can be changed by changing the value of -d flag.
 -N will run squid in foreground.
-Start squid using 'systemctl start squid'.
+Start squid using 'sudo systemctl start squid'.
 Run 'sq' for more options.
 EOF

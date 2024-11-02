@@ -32,7 +32,7 @@ The network topology should look like this.
     You can set via GUI like this:
     ![Static IP](./assets/static-ip.jpg)
 
-    Assuming your public interface is `ens160` and private interface is `ens192`, you can set the static IP using netplan as follows:
+    Assuming your public interface is `ens160` and private interface is `ens192`, you can set static IP on private interface, and DHCP on public interface using netplan as follows:
 
     ```bash
     sudo apt install -y netplan.io
@@ -55,7 +55,7 @@ The network topology should look like this.
     ```
 
 > [!NOTE]
-> Here we are using `8.8.8.8` as our upstream DNS server.
+> Here we are using `10.0.0.192` and `8.8.8.8` as our upstream DNS servers.
 > You can use any other DNS server as per your requirement.
 
 > [!IMPORTANT]
@@ -84,7 +84,7 @@ The network topology should look like this.
       
     2.  Edit file `/etc/dnsmasq.conf`.
 
-        #### Case 1: Just for DHCP
+        #### Case 1: Just for DHCP (preferred)
         ```ini
         listen-address=192.168.0.1
         dhcp-range=192.168.0.100,192.168.0.240,12h
@@ -164,7 +164,7 @@ cd arcvmware-util/squid-proxy-setup
         >   **Custom command execution**<br/>
         >   Some custom command can be executed through `setup.sh` script. `setup.sh` script will be executed just before starting the squid proxy server.
 
-3. Install and run squid (**Method 1: using standalone install**)
+3. Install and run squid (**Method 1: using standalone install (preferred)**)
 
     For standalone install (non-container) in Ubuntu, we can use the [`squid-install.sh`](./squid-install.sh) script.
     **Containerized squid can have performance issues, can hang up after a few days or months.** Hence, it's better to use it as a systemd daemon process.
