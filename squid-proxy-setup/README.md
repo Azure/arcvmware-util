@@ -60,7 +60,7 @@ The network topology should look like this.
 
 > [!IMPORTANT]
 > From previous experience, DNSServer created by dnsmasq isn't that reliable (might start hanging up after a few days), and it's better to offload the DNS resolution to an external DNS server.
-> Hence Case 1 is recommended.
+> Hence Case 1 is recommended for **3.2** below.
 
 3.  Run DHCP and DNS Server on the VM. [Ref1][3], [Ref2][4]
     
