@@ -82,7 +82,7 @@ mkdir -p /tmp/build && \
 sudo chmod 777 /usr/local/squid/var/logs && \
   sudo /usr/local/squid/libexec/security_file_certgen -c -s \
   /usr/local/squid/var/cache/squid/ssl_db -M 4MB && \
-  sudo chown squid:squid /usr/local/squid/var/cache/squid/ssl_db -R
+  sudo chown -R squid:squid /usr/local/squid/
 
 certs_dir="$files_dir/../certs"
 sudo cp "$certs_dir"/microsoft.crt /usr/local/share/ca-certificates/microsoft.crt
