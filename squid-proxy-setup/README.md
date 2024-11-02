@@ -26,11 +26,11 @@ The network topology should look like this.
 
      The IP of `eth1` can either be statically assigned or can be obtained via a DHCP server running on `internet-segment`.
 
-2.  Assign a static IP `192.168.0.1` to `eth0`.
-    - [Using Netplan][1]
-    - [Using network script - old][2]
-    You can set via GUI like this:
-    ![Static IP](./assets/static-ip.jpg)
+2.  Assign a static IP `192.168.0.1` to `eth0`. Various methods:
+    1. [Using Netplan - new method][1]
+    2. [Using network script - old method][2]
+    3. Using GUI:
+        ![Static IP](./assets/static-ip.jpg)
 
     Assuming your public interface is `ens160` and private interface is `ens192`, you can set static IP on private interface, and DHCP on public interface using netplan as follows:
 
