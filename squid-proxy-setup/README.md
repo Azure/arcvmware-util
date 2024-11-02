@@ -152,6 +152,13 @@ cd arcvmware-util/squid-proxy-setup
         Any files that you want to copy to the squid container can be put into `files/`.
         The whole directory will be shared as a volume mount to the squid container.
 
+        **For transparent proxy, uncomment the lines in the squid.conf file.**
+
+        ```bash
+        perl -pi -e 's/#http_port 3130/http_port 3130/g' files/squid.conf
+        perl -pi -e 's/#https_port 3131/https_port 3131/g' files/squid.conf
+        ```
+
         >   Any file want to pass on to container and use in squid config. Just place that file in `files` directory. Those files can be accessed using `/files/<fileName>` inside the container.
 
         >   **Custom command execution**<br/>
