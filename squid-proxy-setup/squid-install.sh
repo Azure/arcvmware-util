@@ -9,6 +9,12 @@ if [ -z "$files_dir" ]; then
 fi
 export files_dir
 
+# if squid cert file is empty, ask user to fix the files before installing
+if [ ! -s "$files_dir/proxy-ca.crt" ] || [ ! -s "$files_dir/proxy-ca.key" ]; then
+  echo "Proxy cert files are empty. Please update the files as per the instructions and then run the script again."
+  exit 1
+fi
+
 # Dependencies from
 # https://github.com/kinkie/dockerfiles/blob/8f1468c3016fba0393f13c3a19662a5fc05ca9ab/ubuntu-jammy/Dockerfile
 # as per https://wiki.squid-cache.org/SquidFaq/CompilingSquid#what-else-do-i-need-to-compile-squid
@@ -78,7 +84,8 @@ sudo chmod 777 /usr/local/squid/var/logs && \
   /usr/local/squid/var/cache/squid/ssl_db -M 4MB && \
   sudo chown squid:squid /usr/local/squid/var/cache/squid/ssl_db -R
 
-sudo cp certs/microsoft.crt /usr/local/share/ca-certificates/microsoft.crt
+certs_dir="$files_dir/../certs"
+sudo cp "$certs_dir"/microsoft.crt /usr/local/share/ca-certificates/microsoft.crt
 sudo update-ca-certificates
 
 sudo ln -s "$files_dir/squid.conf" /usr/local/squid/etc/squid.conf
@@ -96,23 +103,33 @@ cat <<'EOF' | sudo tee /usr/local/bin/sq > /dev/null
 #!/bin/bash
 
 if [ -z "$1" ]; then
-  echo "Usage: sq [start|stop|status|access|cache]"
+  echo "Usage: sq [start|stop|status|access|cache] [loglevel]"
   exit 1
 fi
-if [ "$1" = "start" ]; then
-  sudo squid -f /usr/local/squid/etc/squid.conf
-elif [ "$1" = "stop" ]; then
-  sudo squid -k shutdown
-  sudo pkill squid
-elif [ "$1" = "status" ]; then
-  sudo squid -k check
-elif [ "$1" = "access" ]; then
-  sudo tail -f /usr/local/squid/var/logs/access.log
-elif [ "$1" = "cache" ]; then
-  sudo tail -f /usr/local/squid/var/logs/cache.log
-else
-  echo "Invalid command: '$1' . Usage: sq [start|stop|status|access|cache]"
-fi
+
+case "$1" in
+  "start")
+    # Remove @flags syntax and use proper array expansion
+    sudo squid -N -d 10 -f /usr/local/squid/etc/squid.conf
+    ;;
+  "stop")
+    sudo squid -k shutdown
+    sudo pkill squid
+    ;;
+  "status")
+    sudo squid -k check
+    ;;
+  "access")
+    sudo tail -f /usr/local/squid/var/logs/access.log
+    ;;
+  "cache")
+    sudo tail -f /usr/local/squid/var/logs/cache.log
+    ;;
+  *)
+    echo "Invalid command: '$1'. Usage: sq [start|stop|status|access|cache]"
+    exit 1
+    ;;
+esac
 EOF
 
 echo "Adding squid service to systemd to start on boot. It will run /usr/local/bin/sq start"
@@ -123,14 +140,15 @@ Description=Squid Proxy Server
 After=network.target network-online.target nss-lookup.target
 
 [Service]
+Type=simple
 ExecStart=/usr/local/bin/sq start
 ExecStop=/usr/local/bin/sq stop
 ExecReload=/bin/kill -HUP $MAINPID
 User=root
 Group=root
-Type=forking
-StandardError=file:/usr/local/squid/var/logs/cache.log
-StandardOutput=file:/usr/local/squid/var/logs/access.log
+# Remove StandardError and StandardOutput directives to let journald handle logging
+Restart=on-failure
+RestartSec=5s
 
 [Install]
 WantedBy=multi-user.target
@@ -145,4 +163,11 @@ echo "0 0 * * 0 /usr/local/squid/sbin/squid -k rotate" | sudo crontab -
 sudo chmod +x /usr/local/bin/sq
 # start squid on boot
 
-echo "Squid setup complete. Start squid using 'systemctl start squid'. Run 'sq' for more options."
+cat << EOF
+Squid setup complete.
+Verify by running 'sudo squid -N -d 10'.
+Debug level can be changed by changing the value of -d flag.
+-N will run squid in foreground.
+Start squid using 'systemctl start squid'.
+Run 'sq' for more options.
+EOF

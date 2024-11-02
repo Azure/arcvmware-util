@@ -27,11 +27,32 @@ The network topology should look like this.
      The IP of `eth1` can either be statically assigned or can be obtained via a DHCP server running on `internet-segment`.
 
 2.  Assign a static IP `192.168.0.1` to `eth0`.
-    - [New method][1]
-    - [Old Method][2]
+    - [Using Netplan][1]
+    - [Using network script - old][2]
     You can set via GUI like this:
     ![Static IP](./assets/static-ip.jpg)
 
+    Assuming your public interface is `ens160` and private interface is `ens192`, you can set the static IP using netplan as follows:
+
+    ```bash
+    sudo apt install -y netplan.io
+    sudo cat <<'EOF' > /etc/netplan/config.yaml
+    network:
+      version: 2
+      ethernets:
+        ens160:
+          dhcp4: true
+          dhcp6: true
+        ens192:
+          dhcp4: false
+          dhcp6: false
+          addresses:
+            - 192.168.0.1/16
+          nameservers:
+            addresses: [10.0.0.192, 8.8.8.8]
+    EOF
+    sudo netplan apply
+    ```
 
 > [!NOTE]
 > Here we are using `8.8.8.8` as our upstream DNS server.
@@ -93,28 +114,14 @@ The network topology should look like this.
 
 ## 2. Run squid proxy
 
-> [!NOTE]
-> For standalone install (non-container) in Ubuntu, we can use the [`standalone-install.sh`](./standalone-install.sh) script.
-> Containerized squid can have performance issues, and it's better to use standalone squid server. 
-
-1. Install docker [Ref][5]
-
-```bash
-curl -fsSL https://get.docker.com | sh
-# Next add your user to run docker (rootles mode)
-# don't do dockerd-rootless-setuptool.sh install; it limits the number of uid / gids available for user. Causes issues for some docker images.
-sudo newgrp docker
-sudo usermod -aG docker <your-username>
-```
-
-2. Clone the repository
+1. Clone the repository
 
 ```bash
 git clone https://github.com/Azure/arcvmware-util.git
 cd arcvmware-util/squid-proxy-setup
 ```
 
-3. Create / Update the files required by squid
+2. Create / Update the files required by squid
 
     1.  Create CA certificates (Required only for SSL-Proxy)
 
@@ -150,10 +157,31 @@ cd arcvmware-util/squid-proxy-setup
         >   **Custom command execution**<br/>
         >   Some custom command can be executed through `setup.sh` script. `setup.sh` script will be executed just before starting the squid proxy server.
 
-    4.  Start proxy: [`./start.sh`](./start.sh)<br/>
+3. Install and run squid (**Method 1: using standalone install**)
+
+    For standalone install (non-container) in Ubuntu, we can use the [`squid-install.sh`](./squid-install.sh) script.
+    **Containerized squid can have performance issues, can hang up after a few days or months.** Hence, it's better to use it as a systemd daemon process.
+
+    ```bash
+    ./squid-install.sh
+    ```
+
+4. Run squid (**Method 2: using docker**)
+
+    1. Install docker [Ref][5]
+
+    ```bash
+    curl -fsSL https://get.docker.com | sh
+    # Next add your user to run docker (rootles mode)
+    # don't do dockerd-rootless-setuptool.sh install; it limits the number of uid / gids available for user. Causes issues for some docker images.
+    sudo newgrp docker
+    sudo usermod -aG docker <your-username>
+    ```
+
+    2.  Start proxy: [`./start.sh`](./start.sh)<br/>
         View access logs: [`./tail_access_logs.sh`](./tail_access_logs.sh)<br/>
         Stop proxy: [`./stop.sh`](./stop.sh)<br/>
-    
+
 ## Transparent Proxy
 
 Configure below rules for transparent proxy
@@ -201,30 +229,19 @@ This is another [exhaustive tutorial][exhaustive_iptables_tutorial] on iptables.
 > It is important to note that we should redirect HTTP traffic to the non-SSL port (3130 in our config)
 > If we redirect the HTTP traffic to the SSL port (3129), we get the error: empty reply from server.
 
-1. Run the following commands to set the NAT rules:
+1. Run the [iptables setup script](./iptables-setup.sh) to set the NAT rules.
 
     ```bash
-    export ifExt=ens160 # The interface connected to the external interface (internet-segment)
-    export ifPriv=ens192 # The interface connected to the private network (proxy-segment)
-    export http_proxy_port=3130 # The proxy port for http traffic (non-SSL proxy)
-    export https_proxy_port=3131 # The proxy port for https traffic (SSL proxy)
-    sudo iptables -t nat -A PREROUTING -i $ifPriv -p tcp --dport 80 -j REDIRECT --to-port $http_proxy_port
-    sudo iptables -t nat -A PREROUTING -i $ifPriv -p tcp --dport 443 -j REDIRECT --to-port $https_proxy_port
-    sudo iptables -t nat -A POSTROUTING -o $ifExt -j MASQUERADE
+    bash iptables-setup.sh
     ```
 
-    We have 3 iptable commands here:
-    1. The first command redirects all the incoming traffic arriving through proxy-segment on port 80 to port 3130 (the port where the non-SSL proxy is running).
-    2. The second command redirects all the incoming traffic arriving through proxy-segment on port 443 to port 3131 (the port where the SSL proxy is running).
-    3. The third command is for NAT. It changes the source IP address of **all the packets** going out of the machine through the `internet-segment` interface to the IP address of the `internet-segment` interface. `MASQUERADE` is used to dynamically change the source IP address of the packets, since the IP address of the `internet-segment` interface might change. It's similar to `SNAT` but with `MASQUERADE` the source IP address is dynamically changed.
-
-    [Set of alternative commands](#iptables-alt)
-
-    You can also export and import the iptables rules using the following commands:
-    ```bash
-    iptables-save > /my/ip-rules.conf
-    iptables-restore < /my/ip-rules.conf
-    ```
+    About the iptables commands in the script:
+    1. The NAT table rule changes the source IP address of **all the packets** going out of the machine through the `internet-segment` interface to the IP address of the `internet-segment` interface. `MASQUERADE` is used to dynamically change the source IP address of the packets, since the IP address of the `internet-segment` interface might change. It's similar to `SNAT` but with `MASQUERADE` the source IP address is dynamically changed.
+    2. The PREROUTING chain rules redirect all the incoming traffic arriving through proxy-segment:
+        - port 80 to port 3130 (the port where the non-SSL proxy is running)
+        - port 443 to port 3131 (the port where the SSL proxy is running).
+    4. The Port 53 rules are for forwarding DNS traffic to the upstream DNS server. This is required for the clients to resolve the domain names if the DNS server is not running on the proxy server.
+    5. The ICMP rules are for forwarding ICMP traffic (ping).
 
 2. Persist the iptables rules
       
@@ -261,7 +278,7 @@ Copy the CA certificate to the client machine, and trust it. To trust it:
 
 ```bash
 # Only for SSL proxy
-scp 192.168.0.1:~/squid-proxy-setup/files/proxy-ca.crt .
+scp 192.168.0.1:~/arcvmware-util/squid-proxy-setup/files/proxy-ca.crt .
 sudo cp proxy-ca.crt /usr/local/share/ca-certificates/ # The trusted-root path can be different, depending on the Linux distro. Check the link above
 sudo update-ca-certificates
 export REQUESTS_CA_BUNDLE=/usr/local/share/ca-certificates/proxy-ca.crt
@@ -303,7 +320,7 @@ To pass environment variables during sudo, you can run `sudo -E`
 1. Link contains interesting logformat:
     https://kenmoini.com/post/2024/05/outbound-squid-proxy/
 
-2. <span id="iptables-alt">Alternative commands for `iptables`. But these commands will break if the IP address of the `internet-segment` interface changes.</span>
+2. Alternative commands for `iptables`. But these commands will break if the IP address of the `internet-segment` interface changes.
     ```bash
     export ifExt=ens160 # The interface connected to the external interface (internet-segment)
     export ifPriv=ens192 # The interface connected to the private network (proxy-segment)
@@ -313,6 +330,12 @@ To pass environment variables during sudo, you can run `sudo -E`
     sudo iptables -t nat -A PREROUTING -i $ifPriv -p tcp --dport 80 -j DNAT --to $external_ip:$http_proxy_port
     sudo iptables -t nat -A PREROUTING -i $ifPriv -p tcp --dport 443 -j DNAT --to $external_ip:$https_proxy_port
     sudo iptables -t nat -A POSTROUTING -o $ifExt -j MASQUERADE
+    ```
+
+3. You can also export and import the iptables rules using the following commands:
+    ```bash
+    iptables-save > /my/ip-rules.conf
+    iptables-restore < /my/ip-rules.conf
     ```
 
 <details>
