@@ -242,6 +242,12 @@ This is another [exhaustive tutorial][exhaustive_iptables_tutorial] on iptables.
     bash iptables-setup.sh
     ```
 
+    **You can alternatively setup nftables rules**. nftables is the successor to iptables, and the config is more readable IMO. The script is [nftables-setup.sh](./nftables-setup.sh). **It will setup the rules, and make it persistent.**
+
+    ```bash
+    bash nftables-setup.sh
+    ```
+
     About the iptables commands in the script:
     1. The NAT table rule changes the source IP address of **all the packets** going out of the machine through the `internet-segment` interface to the IP address of the `internet-segment` interface. `MASQUERADE` is used to dynamically change the source IP address of the packets, since the IP address of the `internet-segment` interface might change. It's similar to `SNAT` but with `MASQUERADE` the source IP address is dynamically changed.
     2. The PREROUTING chain rules redirect all the incoming traffic arriving through proxy-segment:
