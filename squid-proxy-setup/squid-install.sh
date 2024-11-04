@@ -1,5 +1,38 @@
 #!/bin/bash
-export SQUID_VERSION=6.10
+
+get_latest_squid_version() {
+  # Get the version from Squid's main releases page
+  local version_page="http://www.squid-cache.org/Versions/"
+  local version_info
+  
+  version_info=$(curl -s "$version_page" | \
+  # Find the first table row after "Current Squid Release Series"
+  sed -n '/<h3>Current Squid Release Series:/,/<tr><td>/p' | \
+  # Get the first numbered version line (skips langpack)
+  grep -E '<tr><td><a href="v[0-9]' | \
+  # Use awk to extract version number
+  awk -F '[<>]' '{
+    for(i=1; i<=NF; i++) {
+      if($i ~ /^[0-9]+\.[0-9]+$/) {
+        print $i
+        exit
+      }
+    }
+  }')
+  
+  if [ -z "$version_info" ]; then
+    echo "Failed to detect latest Squid version. Falling back to default version 6.10" >&2
+    echo "6.10"
+  else
+    echo "$version_info"
+  fi
+}
+
+# First declare SQUID_VERSION
+SQUID_VERSION=
+# Then assign it
+SQUID_VERSION=$(get_latest_squid_version)
+export SQUID_VERSION
 
 
 files_dir=$(find ~ -type d -path "*arcvmware-util/squid-proxy-setup/files" 2>/dev/null | head -n 1)
