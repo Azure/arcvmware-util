@@ -7,12 +7,14 @@ $govcExe = Join-Path $tmpFolder "govc.exe"
 if((Test-Path -Path $govcExe) -eq $false)
 {
   Write-Host "Downloading govc..."
-  $govcZipPath = Join-Path $tmpFolder "govc_windows_amd64.exe.zip"
-  Invoke-WebRequest https://github.com/vmware/govmomi/releases/download/v0.34.2/govc_windows_amd64.zip -OutFile $govcZipPath
+  $govcZipPath = Join-Path $tmpFolder "govc_Windows_x86_64.zip"
+  Invoke-WebRequest https://github.com/vmware/govmomi/releases/download/v0.34.2/govc_Windows_x86_64.zip -OutFile $govcZipPath
   Expand-Archive -Force $govcZipPath -DestinationPath $tmpFolder
 }
 
-$env:GOVC_INSECURE = 'true'
+# Verify the vCenter certificate. If vCenter uses a self-signed certificate, either trust its
+# certificate authority on this machine, or pin the certificate thumbprint when prompted below.
+$env:GOVC_INSECURE = 'false'
 
 Write-Host -ForegroundColor Yellow "Please provide the VCenter details"
 while ($true) {
@@ -39,6 +41,16 @@ $env:GOVC_URL = $vCenterAddress
 $env:GOVC_USERNAME = $vCenterUser
 $env:GOVC_PASSWORD = $vCenterPass
 
+# Optional: pin the vCenter certificate to an expected thumbprint. This verifies the server
+# identity without needing the issuing authority in the machine trust store. Get the thumbprint
+# from a trusted network with: govc about.cert -u <vcenter> -k -thumbprint
+$vCenterThumbprint = Read-Host "Enter the vCenter certificate SHA-1 thumbprint to pin (optional, press Enter to skip)"
+if ($vCenterThumbprint) {
+  $knownHostsFile = Join-Path $tmpFolder "known_hosts"
+  Set-Content -Path $knownHostsFile -Value "$($vCenterAddress.Split('/')[0]) $vCenterThumbprint" -Encoding ascii
+  $env:GOVC_TLS_KNOWN_HOSTS = $knownHostsFile
+}
+
 # $env:GOVC_URL = "vcenter.contoso.com"
 # $env:GOVC_USERNAME = "contoso@vsphere.local"
 # $env:GOVC_PASSWORD = "contosopass"
@@ -53,6 +65,7 @@ while ($true) {
   $vmPath = (. $govcExe find -type m -name $VMName)
   if (!$vmPath) {
     Write-Host "VM not found: $VMName"
+    Write-Host "If the vCenter connection itself failed, the certificate may not be trusted. Trust the vCenter certificate authority on this machine, or re-run and pin the certificate thumbprint when prompted."
     continue
   }
   $VMUser = Read-Host "Please enter the Windows VM username"
@@ -72,7 +85,9 @@ while ($true) {
 # $VMUser = 'contoso\administrator'
 # $VMPass = 'contosovmpass'
 
-$VMCreds = "$($VMUser):$($VMPass)"
+# Pass the guest credentials through the environment rather than the `-l <user>:<password>`
+# argument, so they are not readable in the govc.exe command line by other processes on the host.
+$env:GOVC_GUEST_LOGIN = "$($VMUser):$($VMPass)"
 
 $scriptContents = @'
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent());
@@ -89,7 +104,7 @@ Write-Host "`nDone collecting required info`n`n"
 
 $EncodedScript = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($scriptContents))
 
-. $govcExe guest.run -vm $vmPath -l $VMCreds "powershell.exe -NoLogo -NoProfile -NonInteractive -executionpolicy bypass -encodedCommand $EncodedScript" | Out-File ps-elevation-output.log
+. $govcExe guest.run -vm $vmPath "powershell.exe -NoLogo -NoProfile -NonInteractive -executionpolicy bypass -encodedCommand $EncodedScript" | Out-File ps-elevation-output.log
 
 Write-Host -ForegroundColor Yellow "`n`nPlease check the file ps-elevation-output.log for the output of the script."
 $ProgressPreference = 'Continue'
